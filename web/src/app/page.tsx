@@ -1,9 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://everything-api.deri58.workers.dev";
+
+type AgentResponse = {
+  agent_id: number;
+  agent_name: string;
+  commission_rate: number;
+  rating: number;
+  response: {
+    recommendation: string;
+    confidence: number;
+    reasoning: string;
+    deals: any[];
+  };
+};
 
 type Deal = {
   id: number;
@@ -17,12 +30,31 @@ type Deal = {
   category: string;
   source: string;
   posted_at: string;
+  hotScore?: number;
+  recommendations?: number;
+};
+
+type ChatMessage = {
+  role: "user" | "system";
+  text: string;
+};
+
+const AGENT_ICONS: Record<string, string> = {
+  "최저가봇": "💰", "인기봇": "🔥", "큐레이터봇": "🎯", "타임딜봇": "⚡",
+  "알뜰봇": "🏷️", "가격예측봇": "📊", "비교봇": "⚖️", "선물봇": "🎁",
+  "가성비봇": "💎", "어드바이저봇": "🧠", "카테고리봇": "📂", "트렌드봇": "📈",
 };
 
 const SOURCE_NAMES: Record<string, string> = {
-  coupang: "쿠팡",
-  naver_shopping: "네이버쇼핑",
-  "11st": "11번가",
+  coupang: "쿠팡", "11st": "11번가", danawa: "다나와", ppomppu: "뽐뿌",
+  ruliweb: "루리웹", clien: "클리앙", fmkorea: "FM코리아", quasarzone: "퀘사이저존",
+  gsshop: "GS샵", lotteon: "롯데온", naver_shopping: "네이버쇼핑",
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  coupang: "#e44232", "11st": "#ff0038", danawa: "#0070c0", ppomppu: "#0d5aa7",
+  ruliweb: "#002b5c", clien: "#4caf50", fmkorea: "#3b5998", quasarzone: "#1a1a2e",
+  gsshop: "#ec008c", naver_shopping: "#03c75a",
 };
 
 function formatPrice(price: number) {
@@ -33,39 +65,144 @@ function formatPrice(price: number) {
 function timeAgo(dateStr: string) {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  return `${Math.floor(hr / 24)}일 전`;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "방금";
+  if (mins < 60) return `${mins}분 전`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  return `${days}일 전`;
 }
 
 export default function Home() {
-  const [query, setQuery] = useState("");
+  const [input, setInput] = useState("");
+  const [chatMsgs, setChatMsgs] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "chatting" | "agents">("idle");
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [filter, setFilter] = useState("all");
+  const [feedTab, setFeedTab] = useState<"hot" | "latest">("hot");
+  const [feedFilter, setFeedFilter] = useState("all");
+  const [feedLoading, setFeedLoading] = useState(false);
+
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchDeals();
-  }, [filter]);
-
-  const fetchDeals = async () => {
+  // 피드 데이터 로드
+  const loadFeed = async (tab: "hot" | "latest") => {
+    setFeedLoading(true);
     try {
-      const params = new URLSearchParams({ sort: "latest", limit: "30" });
-      if (filter !== "all") params.set("source", filter);
-      const res = await fetch(`${API_URL}/api/deals?${params}`);
+      const url = tab === "hot"
+        ? `${API_URL}/api/hot?limit=30&period=week`
+        : `${API_URL}/api/deals?sort=latest&limit=30`;
+      const res = await fetch(url);
       const data = await res.json();
       setDeals(data.data || []);
     } catch (err) {
-      console.error("Fetch failed:", err);
+      console.error("Feed load failed:", err);
+    } finally {
+      setFeedLoading(false);
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (phase === "idle") loadFeed(feedTab);
+  }, [feedTab, phase]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (phase === "chatting" && !chatLoading) {
+      setTimeout(() => chatInputRef.current?.focus(), 100);
+    }
+  }, [chatMsgs, agentResponses, chatLoading, phase]);
+
+  // Gemini 대화
+  const sendChat = async (newMsgs: ChatMessage[]) => {
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: newMsgs }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const reply = data.reply || "어떤 상품을 찾고 계신가요?";
+        const updated = [...newMsgs, { role: "system" as const, text: reply }];
+        setChatMsgs(updated);
+
+        // LLM이 니즈 파악 완료했으면 에이전트에게 전달
+        if (data.ready && data.query) {
+          setPhase("agents");
+          const keywords = data.query.keywords || [];
+          const product = data.query.product || "";
+          const specs = data.query.specs ? Object.values(data.query.specs).join(" ") : "";
+          const budget = data.query.budget || "";
+          const finalQuery = `${product} ${specs} ${budget} ${keywords.join(" ")}`.trim();
+          sendToAgents(finalQuery);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setChatMsgs(prev => [...prev, { role: "system", text: "죄송해요, 잠시 문제가 생겼어요. 다시 말씀해주세요!" }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // 에이전트 전달
+  const sendToAgents = async (query: string) => {
+    setAgentLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/agents/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      const sorted = (data.responses || []).sort(
+        (a: AgentResponse, b: AgentResponse) => (b.response.confidence || 0) - (a.response.confidence || 0)
+      );
+      setAgentResponses(sorted);
+    } catch (err) { console.error(err); }
+    finally { setAgentLoading(false); }
+  };
+
+  // 유저 입력
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    if (!input.trim() || chatLoading) return;
+    const text = input.trim();
+    setInput("");
+
+    const newMsgs = [...chatMsgs, { role: "user" as const, text }];
+    setChatMsgs(newMsgs);
+
+    if (phase === "idle") setPhase("chatting");
+    sendChat(newMsgs);
+  };
+
+  // 바로 에이전트에게 보내기
+  const handleDirectSend = () => {
+    if (chatMsgs.length === 0) return;
+    const userMsgs = chatMsgs.filter(m => m.role === "user").map(m => m.text);
+    const query = userMsgs.join(" ");
+    setPhase("agents");
+    setChatMsgs(prev => [...prev, { role: "system", text: "알겠어요! 에이전트들에게 바로 물어볼게요." }]);
+    sendToAgents(query);
+  };
+
+  // 새 대화
+  const handleReset = () => {
+    setChatMsgs([]);
+    setPhase("idle");
+    setAgentResponses([]);
+    setAgentLoading(false);
+    setChatLoading(false);
   };
 
   return (
@@ -76,117 +213,254 @@ export default function Home() {
         <span className="header-link">API 문서</span>
       </header>
 
-      <div className="hero">
-        <h1 className="logo">
-          <span className="e1">e</span>
-          <span className="v">v</span>
-          <span>e</span>
-          <span className="r">r</span>
-          <span className="y">y</span>
-          <span>t</span>
-          <span className="e2">h</span>
-          <span>i</span>
-          <span className="v">n</span>
-          <span className="e1">g</span>
-        </h1>
-        <p className="tagline">모든 할인, 하나의 검색</p>
+      {phase === "idle" ? (
+        /* 초기 상태 */
+        <div className="hero">
+          <h1 className="logo">
+            <span className="e1">e</span><span className="v">v</span><span>e</span>
+            <span className="r">r</span><span className="y">y</span><span>t</span>
+            <span className="e2">h</span><span>i</span><span className="v">n</span>
+            <span className="e1">g</span>
+          </h1>
+          <p className="tagline">AI 에이전트에게 물어보세요</p>
 
-        <form className="search-form" onSubmit={handleSearch}>
-          <div className="search-wrapper">
-            <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-            <input
-              className="search-input"
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="찾고 싶은 할인 상품을 검색하세요"
-              autoFocus
-            />
-          </div>
-        </form>
-      </div>
+          <form className="search-form" onSubmit={handleSubmit}>
+            <div className="search-wrapper">
+              <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                className="search-input"
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="무엇을 찾고 계신가요? (예: 침대 사고싶어)"
+                autoFocus
+              />
+            </div>
+          </form>
 
-      <div className="feed">
-        <div className="feed-header">
-          <h2 className="feed-title">실시간 할인</h2>
-          <div className="feed-filters">
-            {[
-              { key: "all", label: "전체" },
-              { key: "coupang", label: "쿠팡" },
-              { key: "naver_shopping", label: "네이버" },
-              { key: "11st", label: "11번가" },
-            ].map((f) => (
-              <button
-                key={f.key}
-                className={`filter-btn ${filter === f.key ? "active" : ""}`}
-                onClick={() => setFilter(f.key)}
-              >
-                {f.label}
+          <div className="quick-examples">
+            {["노트북 추천해줘", "선물 뭐가 좋을까", "이어폰 사고싶어", "침대 추천"].map(ex => (
+              <button key={ex} className="example-chip" onClick={() => {
+                const msgs = [{ role: "user" as const, text: ex }];
+                setChatMsgs(msgs);
+                setPhase("chatting");
+                sendChat(msgs);
+              }}>
+                {ex}
               </button>
             ))}
           </div>
-        </div>
 
-        {deals.length > 0 ? (
-          <div className="deal-grid">
-            {deals.map((deal) => (
-              <a
-                key={deal.id}
-                href={deal.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="deal-card"
-              >
-                {deal.image_url && (
-                  <div className="deal-image">
-                    <img src={deal.image_url} alt={deal.title} />
-                  </div>
-                )}
-                <div className="deal-body">
-                  <div className="deal-source">
-                    {SOURCE_NAMES[deal.source] || deal.source}
-                    {deal.posted_at && (
-                      <span className="deal-time">{timeAgo(deal.posted_at)}</span>
+          {/* 딜 피드 */}
+          <div className="feed">
+            <div className="feed-header">
+              <div className="feed-tabs">
+                <button className={`feed-tab ${feedTab === "hot" ? "active" : ""}`} onClick={() => setFeedTab("hot")}>HOT</button>
+                <button className={`feed-tab ${feedTab === "latest" ? "active" : ""}`} onClick={() => setFeedTab("latest")}>최신</button>
+              </div>
+              <div className="feed-filters">
+                {["all", ...Array.from(new Set(deals.map(d => d.source)))].map(s => (
+                  <button key={s} className={`filter-btn ${feedFilter === s ? "active" : ""}`} onClick={() => setFeedFilter(s)}>
+                    {s === "all" ? "전체" : SOURCE_NAMES[s] || s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {feedLoading ? (
+              <div className="loading">
+                <div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" />
+              </div>
+            ) : (
+              <div className="deal-grid">
+                {(feedFilter === "all" ? deals : deals.filter(d => d.source === feedFilter)).map((deal) => (
+                  <a key={deal.id} href={deal.url} target="_blank" rel="noopener noreferrer" className={`deal-card ${deal.hotScore && deal.hotScore > 30 ? "deal-hot" : ""}`}>
+                    {deal.hotScore && deal.hotScore > 30 && (
+                      <div className="hot-score-bar">
+                        <span className="hot-fire">🔥 HOT</span>
+                        {deal.recommendations && deal.recommendations > 0 && (
+                          <span className="hot-recs">추천 {deal.recommendations}</span>
+                        )}
+                      </div>
                     )}
-                  </div>
-                  <div className="deal-title">{deal.title}</div>
-                  <div className="deal-price-row">
-                    {deal.discount_rate > 0 && (
-                      <span className="deal-discount">{deal.discount_rate}%</span>
-                    )}
-                    <span className="deal-sale-price">{formatPrice(deal.sale_price)}</span>
-                    {deal.original_price > 0 && deal.original_price !== deal.sale_price && (
-                      <span className="deal-original-price">{formatPrice(deal.original_price)}</span>
-                    )}
+                    <div className="deal-image">
+                      {deal.image_url ? (
+                        <img src={deal.image_url} alt={deal.title} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <div className="deal-image-placeholder">
+                          <span>{SOURCE_NAMES[deal.source] || deal.source}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="deal-body">
+                      <div className="deal-source">
+                        <span className="deal-source-badge" style={{ background: SOURCE_COLORS[deal.source] || "#5f6368" }}>
+                          {SOURCE_NAMES[deal.source] || deal.source}
+                        </span>
+                        <span className="deal-time">{timeAgo(deal.posted_at)}</span>
+                      </div>
+                      <div className="deal-title">{deal.title}</div>
+                      <div className="deal-price-row">
+                        {deal.discount_rate > 0 && (
+                          <span className="deal-discount">{deal.discount_rate}%</span>
+                        )}
+                        {deal.sale_price > 0 && (
+                          <span className="deal-sale-price">{formatPrice(deal.sale_price)}</span>
+                        )}
+                      </div>
+                      {deal.original_price > 0 && deal.original_price !== deal.sale_price && (
+                        <span className="deal-original-price">{formatPrice(deal.original_price)}</span>
+                      )}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {!feedLoading && deals.length === 0 && (
+              <div className="empty-feed">아직 수집된 딜이 없습니다. 크롤러를 실행해주세요.</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* 대화 모드 */
+        <div className="chat-container">
+          <div className="chat-header">
+            <div className="results-logo" onClick={handleReset} style={{ cursor: "pointer" }}>
+              <span style={{ color: "#4285f4" }}>e</span><span style={{ color: "#ea4335" }}>v</span><span>e</span>
+              <span style={{ color: "#4285f4" }}>r</span><span style={{ color: "#34a853" }}>y</span><span>t</span>
+              <span style={{ color: "#fbbc05" }}>h</span><span>i</span><span style={{ color: "#ea4335" }}>n</span>
+              <span style={{ color: "#4285f4" }}>g</span>
+            </div>
+            <button className="reset-btn" onClick={handleReset}>새 질문</button>
+          </div>
+
+          <div className="chat-messages">
+            {chatMsgs.map((msg, i) => (
+              <div key={i} className={`chat-msg ${msg.role}`}>
+                {msg.role === "system" && <div className="chat-bot-icon">E</div>}
+                <div className={`chat-bubble ${msg.role}`}>
+                  <p>{msg.text}</p>
+                </div>
+              </div>
+            ))}
+
+            {chatLoading && (
+              <div className="chat-msg system">
+                <div className="chat-bot-icon">E</div>
+                <div className="chat-bubble system">
+                  <div className="typing-indicator">
+                    <span></span><span></span><span></span>
                   </div>
                 </div>
-              </a>
-            ))}
+              </div>
+            )}
+
+            {/* 바로 에이전트에게 보내기 버튼 */}
+            {phase === "chatting" && !chatLoading && chatMsgs.length >= 2 && (
+              <div className="chat-skip">
+                <button className="skip-btn" onClick={handleDirectSend}>
+                  이 정도면 충분해요 — 에이전트에게 물어보기
+                </button>
+              </div>
+            )}
+
+            {/* 에이전트 로딩 */}
+            {agentLoading && (
+              <div className="chat-msg system">
+                <div className="chat-bot-icon">E</div>
+                <div className="chat-bubble system">
+                  <p>12개 에이전트가 경쟁 중...</p>
+                  <div className="loading" style={{ padding: "10px 0" }}>
+                    <div className="loading-dot" />
+                    <div className="loading-dot" />
+                    <div className="loading-dot" />
+                    <div className="loading-dot" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 에이전트 응답 */}
+            {agentResponses.length > 0 && (
+              <div className="agent-results-chat">
+                <div className="chat-msg system">
+                  <div className="chat-bot-icon">E</div>
+                  <div className="chat-bubble system">
+                    <p>에이전트들이 추천을 준비했어요!</p>
+                  </div>
+                </div>
+                <div className="agent-response-grid">
+                  {agentResponses.slice(0, 6).map((r, i) => (
+                    <div key={i} className={`agent-response-card ${i === 0 ? "agent-best" : ""}`}>
+                      <div className="agent-response-header">
+                        <div className="agent-avatar">{AGENT_ICONS[r.agent_name] || "🤖"}</div>
+                        <div className="agent-response-info">
+                          <div className="agent-response-name">
+                            {r.agent_name}
+                            {i === 0 && <span className="best-badge">BEST</span>}
+                          </div>
+                          <div className="agent-response-meta">
+                            신뢰도 {Math.round((r.response.confidence || 0) * 100)}% · 수수료 {r.commission_rate}%
+                          </div>
+                        </div>
+                      </div>
+                      <div className="agent-response-text">{r.response.recommendation}</div>
+                      <div className="agent-response-reason">{r.response.reasoning}</div>
+                      {r.response.deals && r.response.deals.length > 0 && (
+                        <div className="agent-deal-cards">
+                          {r.response.deals.slice(0, 2).map((deal: any, j: number) => (
+                            <a key={j} href={deal.url} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
+                              {deal.image_url && (
+                                <div className="agent-deal-img">
+                                  <img src={deal.image_url} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                </div>
+                              )}
+                              <div className="agent-deal-info">
+                                <div className="agent-deal-title">{deal.title?.substring(0, 30)}{deal.title?.length > 30 ? "..." : ""}</div>
+                                {deal.sale_price > 0 && <div className="agent-deal-price">{deal.sale_price.toLocaleString()}원</div>}
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div ref={chatEndRef} />
           </div>
-        ) : (
-          <div className="empty-feed">
-            <p>아직 수집된 할인 상품이 없습니다</p>
-            <p style={{ fontSize: "14px", color: "#9aa0a6" }}>크롤러를 실행하면 여기에 상품이 표시됩니다</p>
-          </div>
-        )}
-      </div>
+
+          {/* 입력창 (에이전트 결과 나오기 전까지) */}
+          {phase === "chatting" && (
+            <form className="chat-input-form" onSubmit={handleSubmit}>
+              <input
+                ref={chatInputRef}
+                className="chat-input"
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="답변을 입력하세요..."
+                autoFocus
+                disabled={chatLoading}
+              />
+              <button type="submit" className="chat-send-btn" disabled={chatLoading}>전송</button>
+            </form>
+          )}
+        </div>
+      )}
+
 
       <footer className="footer">
         <div className="footer-top">대한민국</div>
         <div className="footer-bottom">
-          <div className="footer-links">
-            <span>소개</span>
-            <span>개인정보처리방침</span>
-            <span>약관</span>
-          </div>
-          <div className="footer-links">
-            <span>API</span>
-            <span>에이전트</span>
-            <span>문의</span>
-          </div>
+          <div className="footer-links"><span>소개</span><span>개인정보처리방침</span><span>약관</span></div>
+          <div className="footer-links"><span>API</span><span>에이전트</span><span>문의</span></div>
         </div>
       </footer>
     </div>

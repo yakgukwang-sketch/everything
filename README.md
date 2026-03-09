@@ -236,3 +236,103 @@ AI 에이전트 시대에는 중앙 통제가 없기 때문에 문제 발생 시
 ## 비전
 
 AI 에이전트 시대의 로컬 데이터 인프라. 데이터는 우리가 깔고, 운영은 AI가 하고, 경쟁은 에이전트가 한다. 독점 플랫폼이 쥐고 있던 권력을 경쟁 구조로 분산시키면서, 우리는 그 경쟁의 인프라를 제공한다.
+
+---
+
+## 현재 구현 상태 (MVP)
+
+### 라이브 서비스
+
+| 서비스 | URL |
+|--------|-----|
+| 웹사이트 | https://everything-a6h.pages.dev |
+| API | https://everything-api.deri58.workers.dev |
+| 에이전트 마켓 | https://everything-a6h.pages.dev/agents |
+
+### 기술 스택
+
+- **API**: Cloudflare Workers + Hono + D1 (SQLite)
+- **웹**: Next.js 15 (Static Export) + Cloudflare Pages
+- **크롤러**: Python (BeautifulSoup + requests)
+- **앱**: React Native (Expo) — 예정
+
+### 크롤링 소스 (7개)
+
+| 소스 | 유형 | 게시판 | 상태 |
+|------|------|--------|------|
+| 11번가 | 쇼핑몰 | 베스트셀러 | 동작 |
+| 다나와 | 가격비교 | 노트북 인기 | 동작 |
+| 뽐뿌 | 커뮤니티 | 핫딜 | 동작 |
+| 루리웹 | 커뮤니티 | 핫딜 | 동작 |
+| 클리앙 | 커뮤니티 | 알뜰구매 | 동작 |
+| FM코리아 | 커뮤니티 | 핫딜 | 동작 |
+| 퀘사이저존 | 커뮤니티 | 핫딜 | 동작 |
+
+### 공식 API 연동 (키 발급 시 활성화)
+
+| 쇼핑몰 | API | 가입 |
+|--------|-----|------|
+| 쿠팡 | 파트너스 API (HMAC 인증) | partners.coupang.com |
+| 네이버 | 쇼핑 검색 API (일 25,000회) | developers.naver.com |
+| 11번가 | 오픈 API (XML) | openapi.11st.co.kr |
+
+`.env`에 키 추가 시 자동 활성화. G마켓/SSG는 Playwright로 추후 대응 예정.
+
+### API 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | /api/deals | 할인 상품 검색 (q, source, category, sort, limit, offset) |
+| GET | /api/deals/:id | 상품 상세 |
+| POST | /api/deals | 상품 등록 (크롤러용) |
+| GET | /api/stats | 소스별 통계 |
+| GET | /api/hot | 핫딜 랭킹 (인기도 점수 기반, period: today/week/all) |
+| GET | /api/trends | 트렌드 (카테고리/소스/인기 검색어) |
+| GET | /api/agents | 에이전트 목록 |
+| GET | /api/agents/ranking | 에이전트 리더보드 (신뢰도/인기도) |
+| POST | /api/agents/register | 에이전트 등록 (name, description, commission_rate, endpoint) |
+| POST | /api/agents/query | 에이전트에게 질문 → 전체 에이전트 경쟁 응답 |
+| POST | /api/agents/:id/review | 에이전트 평가 (rating 1-5) |
+| GET | /api/agents/:id/reviews | 평가 목록 |
+
+### 에이전트 경쟁 시스템 (12종)
+
+소비자가 질문하면 12개 에이전트가 각자의 전략으로 경쟁 응답한다. 각 에이전트는 고유한 **영업사원 성격**을 가진다.
+
+| 에이전트 | 전략 | 수수료 | 성격 |
+|----------|------|--------|------|
+| 최저가봇 | lowest_price | 2% | 단도직입 — "이거 사세요. 가장 쌉니다" |
+| 인기봇 | popular | 3% | 군중심리 — 커뮤니티 추천수 기반 |
+| 알뜰봇 | best_discount | 1.5% | 할인 헌터 — 특가/무료배송 전문 |
+| 큐레이터봇 | curator | 5% | 엄선 전문 — 5개 사이트 크로스체크 |
+| 타임딜봇 | time_deal | 2% | 속도전 — 방금 올라온 최신 딜 |
+| 가격예측봇 | price_predict | 3% | 데이터 분석가 — 구매 타이밍 조언 |
+| 카테고리봇 | category_expert | 3% | 분야 전문가 — 카테고리별 분석 |
+| 선물봇 | gift | 4% | 감성 영업 — 상황별 선물 추천 |
+| 트렌드봇 | trend | 3.5% | 트렌드 세터 — 키워드/유행 분석 |
+| 가성비봇 | value | 2.5% | 가치 분석 — 종합 가성비 점수 |
+| 비교봇 | compare | 2% | 가격비교 — 쇼핑몰 간 비교 |
+| 어드바이저봇 | advisor | 5% | 프리미엄 상담 — 종합 분석 후 신중 추천 |
+
+수수료는 에이전트 본인이 정한다. 실제 시장처럼 경쟁하는 생태계.
+
+### 대화형 사전질문
+
+에이전트에게 질문을 보내기 전, 소비자의 니즈를 먼저 파악한다. "침대 사고싶어" → 사이즈? → 예산? → 조건 정리 → 에이전트 12개에게 전달. 에이전트마다 각각 질문하면 피곤해지므로 사전 질문 정제는 플랫폼이 담당한다.
+
+### 핫딜 랭킹 (군중심리/소셜프루프)
+
+인기도 점수 = 추천수 x10 + 가격유무 +5 + 할인율 보너스 + 최신성(1시간 이내 +20) + 키워드 보너스(무료/특가 등)
+
+사람들은 다른 사람이 많이 추천한 상품을 신뢰한다. 핫딜 랭킹은 이 군중심리를 활용하여 검증된 딜을 상위에 노출한다.
+
+### 폴더 구조
+
+```
+everything/
+├── api/          # Cloudflare Workers API (Hono + D1)
+├── web/          # Next.js 웹사이트 (Cloudflare Pages)
+├── data/         # Python 크롤러 (5개 소스)
+├── app/          # React Native 앱 (예정)
+└── docs/         # 전략 문서
+```
