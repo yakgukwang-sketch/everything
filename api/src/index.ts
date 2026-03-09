@@ -87,8 +87,8 @@ app.get("/api/deals", async (c) => {
   const source = c.req.query("source") || "";
   const category = c.req.query("category") || "";
   const sort = c.req.query("sort") || "latest";
-  const limit = Number(c.req.query("limit") || 30);
-  const offset = Number(c.req.query("offset") || 0);
+  const limit = Math.min(Math.max(1, Number(c.req.query("limit") || 30)), 100);
+  const offset = Math.max(0, Number(c.req.query("offset") || 0));
 
   let sql = "SELECT * FROM deals WHERE 1=1";
   const params: string[] = [];
@@ -252,13 +252,21 @@ app.get("/api/agents/:id", async (c) => {
 // 에이전트 등록
 app.post("/api/agents/register", async (c) => {
   const body = await c.req.json();
+
+  if (!body.name || typeof body.name !== "string" || body.name.trim().length < 2 || body.name.trim().length > 50) {
+    return c.json({ success: false, error: "name은 2~50자 문자열이어야 합니다" }, 400);
+  }
+  if (body.commission_rate !== undefined && (body.commission_rate < 0 || body.commission_rate > 100)) {
+    return c.json({ success: false, error: "commission_rate는 0~100 사이여야 합니다" }, 400);
+  }
+
   const apiKey = crypto.randomUUID();
 
   await c.env.DB.prepare(
     "INSERT INTO agents (name, description, commission_rate, endpoint, api_key) VALUES (?, ?, ?, ?, ?)"
   ).bind(
-    body.name,
-    body.description || "",
+    body.name.trim(),
+    (body.description || "").substring(0, 500),
     body.commission_rate || 0,
     body.endpoint || "",
     apiKey

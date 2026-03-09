@@ -1,0 +1,11 @@
+{"messages":[
+  {"role":"user","text":"침대 사고싶어"},
+  {"role":"system","text":"어떤 종류의 침대를 찾고 있어?"},
+  {"role":"user","text":"매트리스. 여자친구랑 같이 쓸거야"},
+  {"role":"system","text":"사이즈는 어떤 걸 생각하고 있어?"},
+  {"role":"user","text":"잘 모르겠어 나 키 180이고 여친은 165야"},
+  {"role":"system","text":"킹 사이즈가 편할 거야! 예산은?"},
+  {"role":"user","text":"50만원 정도"},
+  {"role":"system","text":"매트리스 종류는? 푹신한 라텍스나 탄탄한 스프링?"},
+  {"role":"user","text":"푹신한게 좋아"}
+]}

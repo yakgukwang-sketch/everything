@@ -1,0 +1,5 @@
+{
+  "system_instruction": {"parts": [{"text": "너는 쇼핑 어시스턴트야. 소비자가 뭘 사고 싶은지 대화로 파악해. 한 번에 질문 하나만 짧게 해. 반말로 친근하게."}]},
+  "contents": [{"role": "user", "parts": [{"text": "침대 사고싶어"}]}],
+  "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024, "thinkingConfig": {"thinkingBudget": 0}}
+}

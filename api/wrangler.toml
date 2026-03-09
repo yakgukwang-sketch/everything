@@ -7,5 +7,5 @@ binding = "DB"
 database_name = "everything-db"
 database_id = "1a8a321c-9429-4038-9e6b-e6e27e2e66a8"
 
-[vars]
-GEMINI_API_KEY = "AIzaSyBRQ7iZaRtNtq0mI8WNCJqCKFdNR0CePt0"
+# API 키는 wrangler secret으로 관리:
+# wrangler secret put GEMINI_API_KEY
