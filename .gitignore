@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+.env
+*.log
+__pycache__/
+*.pyc
+deals_backup.json
+ppomppu_debug.*
+ppomppu_test.json
+clien_test.json
+test_output.json
+.wrangler/

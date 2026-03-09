@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "everything",
+    "slug": "everything",
+    "version": "0.1.0",
+    "scheme": "everything",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "bundleIdentifier": "com.everything.app"
+    },
+    "android": {
+      "package": "com.everything.app"
+    },
+    "plugins": ["expo-router"]
+  }
+}

@@ -1,0 +1,8 @@
+name = "everything-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "everything-db"
+database_id = "1a8a321c-9429-4038-9e6b-e6e27e2e66a8"
