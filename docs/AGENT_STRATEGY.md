@@ -158,8 +158,45 @@ POST /api/agents/:id/review
 
 ## 실행 순서
 
-1. **지금**: 할인 상품 크롤링 + API + 웹 검색 (완료)
-2. **다음**: 크롤링 소스 확대 + 자동 크롤링 에이전트
-3. **그 다음**: 에이전트 등록 API + 마켓플레이스 UI
-4. **그 다음**: 추천 에이전트 직접 1개 만들어서 데모
-5. **최종**: 외부 개발자에게 API 공개 → 에이전트 생태계 형성
+1. ~~할인 상품 크롤링 + API + 웹 검색~~ (완료)
+2. ~~크롤링 소스 확대: 뽐뿌, 루리웹, 클리앙, FM코리아, 퀘사이저존~~ (완료)
+3. ~~에이전트 등록 API + 마켓플레이스 UI~~ (완료)
+4. ~~추천 에이전트 데모 (최저가봇)~~ (완료)
+5. **다음**: 외부 개발자에게 API 공개 → 에이전트 생태계 형성
+6. **다음**: 자동 크롤링 스케줄링 (Cloudflare Cron Triggers)
+7. **다음**: 에이전트 간 경쟁 랭킹 시스템 고도화
+
+---
+
+## 현재 라이브 서비스
+
+| 서비스 | URL |
+|--------|-----|
+| 웹사이트 | https://everything-a6h.pages.dev |
+| API | https://everything-api.deri58.workers.dev |
+| 데모 에이전트 | https://everything-agent-demo.deri58.workers.dev |
+| 에이전트 마켓 | https://everything-a6h.pages.dev/agents |
+
+### 크롤링 소스 (5개)
+
+| 소스 | 게시판 | 상태 |
+|------|--------|------|
+| 뽐뿌 | 핫딜 | 동작 |
+| 루리웹 | 핫딜 | 동작 |
+| 클리앙 | 알뜰구매 | 동작 |
+| FM코리아 | 핫딜 | 동작 |
+| 퀘사이저존 | 핫딜 | 동작 |
+
+### API 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | /api/deals | 할인 상품 검색 |
+| GET | /api/deals/:id | 상품 상세 |
+| POST | /api/deals | 상품 등록 (크롤러용) |
+| GET | /api/stats | 소스별 통계 |
+| GET | /api/agents | 에이전트 목록 |
+| POST | /api/agents/register | 에이전트 등록 |
+| POST | /api/agents/query | 에이전트에게 질문 |
+| POST | /api/agents/:id/review | 에이전트 평가 |
+| GET | /api/agents/:id/reviews | 평가 목록 |

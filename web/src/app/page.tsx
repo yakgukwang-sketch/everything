@@ -71,6 +71,7 @@ export default function Home() {
   return (
     <div className="main">
       <header className="header">
+        <span className="header-link" onClick={() => router.push("/agents")} style={{ cursor: "pointer" }}>에이전트</span>
         <span className="header-link">에이전트 등록</span>
         <span className="header-link">API 문서</span>
       </header>

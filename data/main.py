@@ -4,6 +4,16 @@ from crawlers.base import upload_deals
 from crawlers.ppomppu import crawl_hotdeal as crawl_ppomppu
 from crawlers.ruliweb import crawl_hotdeal as crawl_ruliweb
 from crawlers.clien import crawl_deals as crawl_clien
+from crawlers.fmkorea import crawl_hotdeal as crawl_fmkorea
+from crawlers.quasarzone import crawl_hotdeal as crawl_quasarzone
+
+CRAWLERS = [
+    ("뽐뿌 핫딜", crawl_ppomppu),
+    ("루리웹 핫딜", crawl_ruliweb),
+    ("클리앙 알뜰구매", crawl_clien),
+    ("FM코리아 핫딜", crawl_fmkorea),
+    ("퀘사이저존 핫딜", crawl_quasarzone),
+]
 
 
 def run():
@@ -13,17 +23,13 @@ def run():
 
     all_deals = []
 
-    # 뽐뿌 핫딜
-    print("\n[1/3] 뽐뿌 핫딜...")
-    all_deals.extend(crawl_ppomppu())
-
-    # 루리웹 핫딜
-    print("\n[2/3] 루리웹 핫딜...")
-    all_deals.extend(crawl_ruliweb())
-
-    # 클리앙 알뜰구매
-    print("\n[3/3] 클리앙 알뜰구매...")
-    all_deals.extend(crawl_clien())
+    for i, (name, crawler) in enumerate(CRAWLERS, 1):
+        print(f"\n[{i}/{len(CRAWLERS)}] {name}...")
+        try:
+            deals = crawler()
+            all_deals.extend(deals)
+        except Exception as e:
+            print(f"  Error: {e}")
 
     print(f"\n총 {len(all_deals)}개 수집 완료")
 
