@@ -114,7 +114,7 @@ export default function Home() {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (phase === "chatting" && !chatLoading) {
+    if ((phase === "chatting" || phase === "agents") && !chatLoading) {
       setTimeout(() => chatInputRef.current?.focus(), 100);
     }
   }, [chatMsgs, agentResponses, chatLoading, phase]);
@@ -182,7 +182,10 @@ export default function Home() {
     const newMsgs = [...chatMsgs, { role: "user" as const, text }];
     setChatMsgs(newMsgs);
 
-    if (phase === "idle") setPhase("chatting");
+    if (phase === "idle" || phase === "agents") {
+      setPhase("chatting");
+      setAgentResponses([]);
+    }
     sendChat(newMsgs);
   };
 
@@ -436,8 +439,8 @@ export default function Home() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* 입력창 (에이전트 결과 나오기 전까지) */}
-          {phase === "chatting" && (
+          {/* 입력창 (대화 중 + 에이전트 결과 후에도 계속 대화 가능) */}
+          {(phase === "chatting" || phase === "agents") && (
             <form className="chat-input-form" onSubmit={handleSubmit}>
               <input
                 ref={chatInputRef}
@@ -445,7 +448,7 @@ export default function Home() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="답변을 입력하세요..."
+                placeholder={phase === "agents" ? "추가 질문이 있으면 입력하세요..." : "답변을 입력하세요..."}
                 autoFocus
                 disabled={chatLoading}
               />
