@@ -2,42 +2,15 @@
 
 from crawlers.base import upload_deals
 from crawlers.ppomppu import crawl_hotdeal as crawl_ppomppu
-from crawlers.ruliweb import crawl_hotdeal as crawl_ruliweb
-from crawlers.clien import crawl_deals as crawl_clien
-from crawlers.fmkorea import crawl_hotdeal as crawl_fmkorea
-from crawlers.quasarzone import crawl_hotdeal as crawl_quasarzone
-from crawlers.elevenst import crawl_hotdeal as crawl_11st
-from crawlers.danawa import crawl_hotdeal as crawl_danawa
-from crawlers.coupang_api import crawl_hotdeal as crawl_coupang_api
-from crawlers.naver_api import crawl_hotdeal as crawl_naver_api
-from crawlers.elevenst_api import crawl_hotdeal as crawl_11st_api
-from crawlers.elevenst_search import crawl_hotdeal as crawl_11st_search
-from crawlers.lotteon import crawl_hotdeal as crawl_lotteon
-from crawlers.gsshop import crawl_hotdeal as crawl_gsshop
 
 CRAWLERS = [
-    # 공식 API (키 있으면 동작)
-    ("쿠팡 파트너스 API", crawl_coupang_api),
-    ("네이버 쇼핑 API", crawl_naver_api),
-    ("11번가 오픈 API", crawl_11st_api),
-    # 쇼핑몰 크롤링
-    ("11번가 베스트", crawl_11st),
-    ("다나와 가격비교", crawl_danawa),
-    ("롯데온 베스트", crawl_lotteon),
-    ("11번가 검색 핫딜", crawl_11st_search),
-    ("GS샵 TV쇼핑", crawl_gsshop),
-    # 커뮤니티 크롤링
-    ("뽐뿌 핫딜", crawl_ppomppu),
-    ("루리웹 핫딜", crawl_ruliweb),
-    ("클리앙 알뜰구매", crawl_clien),
-    ("FM코리아 핫딜", crawl_fmkorea),
-    ("퀘사이저존 핫딜", crawl_quasarzone),
+    ("뽐뿌", crawl_ppomppu),
 ]
 
 
 def run():
     print("=" * 50)
-    print("everything 할인 상품 크롤러")
+    print("everything 크롤러")
     print("=" * 50)
 
     all_deals = []

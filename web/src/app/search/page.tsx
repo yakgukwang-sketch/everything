@@ -1,68 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://everything-api.deri58.workers.dev";
-
-type Deal = {
-  id: number;
-  title: string;
-  description: string;
-  original_price: number;
-  sale_price: number;
-  discount_rate: number;
-  url: string;
-  image_url: string;
-  category: string;
-  source: string;
-  posted_at: string;
-};
-
-type AgentResponse = {
-  agent_id: number;
-  agent_name: string;
-  commission_rate: number;
-  rating: number;
-  response: {
-    recommendation: string;
-    confidence: number;
-    reasoning: string;
-    deals: any[];
-  };
-};
-
-const SOURCE_NAMES: Record<string, string> = {
-  coupang: "쿠팡",
-  "11st": "11번가",
-  danawa: "다나와",
-  ppomppu: "뽐뿌",
-  ruliweb: "루리웹",
-  clien: "클리앙",
-  fmkorea: "FM코리아",
-  quasarzone: "퀘사이저존",
-};
-
-const AGENT_ICONS: Record<string, string> = {
-  "최저가봇": "💰",
-  "인기봇": "🔥",
-  "큐레이터봇": "🎯",
-  "타임딜봇": "⚡",
-  "알뜰봇": "🏷️",
-  "가격예측봇": "📊",
-  "비교봇": "⚖️",
-  "선물봇": "🎁",
-  "가성비봇": "💎",
-  "어드바이저봇": "🧠",
-  "카테고리봇": "📂",
-  "트렌드봇": "📈",
-};
-
-function formatPrice(price: number) {
-  if (!price) return "";
-  return price.toLocaleString() + "원";
-}
+import {
+  API_URL, Deal, AgentResponse,
+  AGENT_ICONS, AGENT_INTROS, SOURCE_NAMES,
+  formatPrice, sanitizeUrl,
+} from "@/lib/shared";
 
 function SearchContent() {
   const router = useRouter();
@@ -199,15 +143,18 @@ function SearchContent() {
                       </div>
                     </div>
                   </div>
+                  {AGENT_INTROS[r.agent_name] && (
+                    <div className="agent-intro">{AGENT_INTROS[r.agent_name]}</div>
+                  )}
                   <div className="agent-response-text">{r.response.recommendation}</div>
                   <div className="agent-response-reason">{r.response.reasoning}</div>
                   {r.response.deals && r.response.deals.length > 0 && (
                     <div className="agent-deal-cards">
-                      {r.response.deals.slice(0, 2).map((deal: any, j: number) => (
-                        <a key={j} href={deal.url} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
+                      {r.response.deals.slice(0, 2).map((deal, j) => (
+                        <a key={j} href={sanitizeUrl(deal.url)} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
                           {deal.image_url && (
                             <div className="agent-deal-img">
-                              <img src={deal.image_url} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <img src={deal.image_url} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                             </div>
                           )}
                           <div className="agent-deal-info">
@@ -274,7 +221,7 @@ function SearchContent() {
                   <div style={{ display: "flex", gap: 16 }}>
                     {deal.image_url && (
                       <div className="result-thumb">
-                        <img src={deal.image_url} alt={deal.title} />
+                        <img src={deal.image_url} alt={deal.title} referrerPolicy="no-referrer" />
                       </div>
                     )}
                     <div style={{ flex: 1 }}>
@@ -282,7 +229,7 @@ function SearchContent() {
                         {SOURCE_NAMES[deal.source] || deal.source} <span>› {deal.category}</span>
                       </div>
                       <a
-                        href={deal.url}
+                        href={sanitizeUrl(deal.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="result-name"

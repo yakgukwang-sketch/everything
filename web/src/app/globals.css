@@ -879,6 +879,16 @@ a {
   margin-top: 2px;
 }
 
+.agent-intro {
+  font-size: 13px;
+  color: #1a73e8;
+  background: #e8f0fe;
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
 .agent-response-text {
   font-size: 15px;
   font-weight: 500;
@@ -1098,8 +1108,8 @@ a {
 .chat-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 8px;
+  margin: 8px 0 16px 46px;
 }
 
 .chat-option-btn {
@@ -1308,5 +1318,147 @@ a {
   .result-thumb {
     width: 80px;
     height: 80px;
+  }
+}
+
+/* 상품 등록 폼 */
+.submit-field {
+  margin-bottom: 20px;
+}
+
+.submit-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #202124;
+  margin-bottom: 6px;
+}
+
+.submit-required {
+  color: #ea4335;
+}
+
+.submit-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid #dfe1e5;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+}
+
+.submit-input:focus {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.submit-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid #dfe1e5;
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.submit-textarea:focus {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* 확인 단계 */
+.confirm-section {
+  margin: 16px 0;
+}
+
+.confirm-card {
+  background: linear-gradient(135deg, #f0f7ff, #fff);
+  border: 2px solid #1a73e8;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a73e8;
+  margin-bottom: 14px;
+}
+
+.confirm-summary {
+  margin-bottom: 16px;
+}
+
+.confirm-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.confirm-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #202124;
+}
+
+.confirm-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #1a73e8;
+  padding: 2px 10px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.confirm-btn-yes {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.confirm-btn-yes:hover {
+  background: #1765cc;
+}
+
+.confirm-btn-no {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #5f6368;
+  background: #f1f3f4;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.confirm-btn-no:hover {
+  background: #e8eaed;
+}
+
+@media (max-width: 480px) {
+  .confirm-buttons {
+    flex-direction: column;
   }
 }

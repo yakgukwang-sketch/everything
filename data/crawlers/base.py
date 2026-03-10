@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_URL = os.getenv("API_URL", "https://everything-api.deri58.workers.dev")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
 
 @dataclass
@@ -30,8 +31,11 @@ class Deal:
 def upload_deals(deals: list[Deal]):
     """수집한 딜을 API에 업로드"""
     data = [asdict(d) for d in deals]
+    headers = {}
+    if ADMIN_API_KEY:
+        headers["Authorization"] = f"Bearer {ADMIN_API_KEY}"
     try:
-        resp = requests.post(f"{API_URL}/api/deals", json=data)
+        resp = requests.post(f"{API_URL}/api/deals", json=data, headers=headers)
         result = resp.json()
         print(f"Uploaded {result.get('inserted', 0)} deals")
         return result

@@ -4,11 +4,68 @@ import { cors } from "hono/cors";
 type Bindings = {
   DB: D1Database;
   GEMINI_API_KEY: string;
+  ADMIN_API_KEY: string;
 };
+
+interface DealRow {
+  id: number;
+  title: string;
+  description: string;
+  original_price: number;
+  sale_price: number;
+  discount_rate: number;
+  url: string;
+  image_url: string;
+  category: string;
+  source: string;
+  source_id: string;
+  posted_at: string;
+  created_at: string;
+  expires_at: string;
+}
+
+interface AgentRow {
+  id: number;
+  name: string;
+  description: string | null;
+  commission_rate: number;
+  endpoint: string | null;
+  api_key: string | null;
+  rating: number;
+  review_count: number;
+  total_queries: number;
+  status: string;
+  created_at: string;
+}
+
+interface AgentStrategyResult {
+  recommendation: string;
+  confidence: number;
+  reasoning: string;
+  deals: DealRow[];
+}
+
+type AgentStrategy = (query: string, allDeals: DealRow[]) => AgentStrategyResult;
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.use("/*", cors());
+app.use("/*", cors({
+  origin: (origin) => {
+    if (!origin) return "https://everything-a6h.pages.dev";
+    if (origin === "https://everything-a6h.pages.dev") return origin;
+    if (origin.endsWith(".everything-a6h.pages.dev")) return origin;
+    if (origin === "http://localhost:3000") return origin;
+    return "https://everything-a6h.pages.dev";
+  },
+  allowMethods: ["GET", "POST"],
+  allowHeaders: ["Content-Type", "Authorization"],
+}));
+
+function sanitizeUrl(url: string): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return "";
+}
 
 // Gemini 대화형 니즈 파악
 const CHAT_SYSTEM_PROMPT = `너는 쇼핑 어시스턴트야. 소비자가 뭘 사고 싶은지 자연스러운 대화로 파악해.
@@ -17,31 +74,56 @@ const CHAT_SYSTEM_PROMPT = `너는 쇼핑 어시스턴트야. 소비자가 뭘 �
 1. 한 번에 질문 하나만 해. 짧고 친근하게.
 2. 소비자가 모호하게 말하면 구체적으로 좁혀나가.
 3. 파악해야 할 것: 상품 종류, 용도, 사이즈/스펙, 예산, 특별 조건
-4. 충분히 파악했으면 반드시 아래 JSON 형식으로 정리해서 응답해:
+4. 매 질문마다 반드시 선택지를 제공해. 아래 형식으로:
+
+[OPTIONS]
+선택지1|선택지2|선택지3|선택지4
+[/OPTIONS]
+
+예시:
+어떤 종류의 식재료를 찾아?
+[OPTIONS]
+고기류|해산물|채소/과일|밀키트/간편식
+[/OPTIONS]
+
+5. 선택지는 2~5개. 짧고 명확하게 (10자 이내).
+6. 충분히 파악했으면 반드시 아래 JSON 형식으로 정리해서 응답해:
 
 [READY]
 {"product":"상품명","specs":{"key":"value"},"budget":"예산","keywords":["검색키워드1","검색키워드2"]}
 [/READY]
 
-5. 아직 정보가 부족하면 [READY] 없이 다음 질문만 해.
-6. 인사나 관계없는 말에는 "안녕하세요! 어떤 상품을 찾고 계신가요?" 라고 답해.
-7. 반말로 친근하게 대화해.`;
+7. 아직 정보가 부족하면 [READY] 없이 다음 질문 + 선택지.
+8. 인사나 관계없는 말에는 "안녕하세요! 어떤 상품을 찾고 계신가요?" + 선택지로 답해.
+9. 반말로 친근하게 대화해.`;
 
 app.post("/api/chat", async (c) => {
-  const { messages } = await c.req.json() as { messages: { role: string; text: string }[] };
-
-  if (!messages || messages.length === 0) {
-    return c.json({ success: false, error: "messages required" }, 400);
-  }
-
-  const geminiMessages = messages.map((m) => ({
-    role: m.role === "user" ? "user" : "model",
-    parts: [{ text: m.text }],
-  }));
-
   try {
+    const { messages } = await c.req.json() as { messages: { role: string; text: string }[] };
+
+    if (!messages || messages.length === 0) {
+      return c.json({ success: false, error: "messages required" }, 400);
+    }
+
+    // Gemini requires alternating user/model and must start with user
+    const geminiMessages: { role: string; parts: { text: string }[] }[] = [];
+    for (const m of messages) {
+      const role = m.role === "user" ? "user" : "model";
+      // Skip consecutive same-role messages by merging
+      if (geminiMessages.length > 0 && geminiMessages[geminiMessages.length - 1].role === role) {
+        geminiMessages[geminiMessages.length - 1].parts[0].text += "\n" + m.text;
+      } else {
+        geminiMessages.push({ role, parts: [{ text: m.text }] });
+      }
+    }
+
+    // Ensure first message is from user
+    if (geminiMessages.length > 0 && geminiMessages[0].role !== "user") {
+      geminiMessages.shift();
+    }
+
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${c.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,8 +138,25 @@ app.post("/api/chat", async (c) => {
       }
     );
 
-    const data = await res.json() as any;
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    interface GeminiResponse {
+      error?: { message: string };
+      candidates?: { content: { parts: { text: string }[] } }[];
+    }
+    const data: GeminiResponse = await res.json();
+
+    if (data.error) {
+      return c.json({ success: false, error: data.error.message || "Gemini API error" }, 502);
+    }
+
+    let reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // [OPTIONS] 블록 파싱
+    let options: string[] = [];
+    const optionsMatch = reply.match(/\[OPTIONS\]([\s\S]*?)\[\/OPTIONS\]/);
+    if (optionsMatch) {
+      options = optionsMatch[1].trim().split("|").map((o: string) => o.trim()).filter(Boolean);
+      reply = reply.replace(/\[OPTIONS\][\s\S]*?\[\/OPTIONS\]/, "").trim();
+    }
 
     // [READY] 블록 감지
     const readyMatch = reply.match(/\[READY\]([\s\S]*?)\[\/READY\]/);
@@ -69,15 +168,16 @@ app.post("/api/chat", async (c) => {
           reply: reply.replace(/\[READY\][\s\S]*?\[\/READY\]/, "").trim(),
           ready: true,
           query: parsed,
+          options,
         });
       } catch {
-        return c.json({ success: true, reply, ready: false });
+        return c.json({ success: true, reply, ready: false, options });
       }
     }
 
-    return c.json({ success: true, reply, ready: false });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    return c.json({ success: true, reply, ready: false, options });
+  } catch (err) {
+    return c.json({ success: false, error: err instanceof Error ? err.message : "Unknown error" }, 500);
   }
 });
 
@@ -155,13 +255,26 @@ app.get("/api/stats", async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
-// 할인 상품 등록 (크롤러용)
+// 할인 상품 등록 (크롤러용 — 인증 필요)
 app.post("/api/deals", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token || token !== c.env.ADMIN_API_KEY) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
   const body = await c.req.json();
   const deals = Array.isArray(body) ? body : [body];
+
+  if (deals.length > 200) {
+    return c.json({ success: false, error: "Maximum 200 deals per request" }, 400);
+  }
+
   let inserted = 0;
 
   for (const deal of deals) {
+    if (!deal.title || !deal.url || !deal.source) continue;
+    if (!sanitizeUrl(deal.url)) continue;
+
     try {
       await c.env.DB.prepare(
         `INSERT OR REPLACE INTO deals
@@ -190,6 +303,79 @@ app.post("/api/deals", async (c) => {
   }
 
   return c.json({ success: true, inserted });
+});
+
+// ===== 사업자 상품 등록 =====
+
+// 사업자 상품 등록
+app.post("/api/deals/submit", async (c) => {
+  const body = await c.req.json();
+
+  // 필수 필드 검증
+  if (!body.title || typeof body.title !== "string" || body.title.trim().length < 2) {
+    return c.json({ success: false, error: "상품명은 2자 이상이어야 합니다" }, 400);
+  }
+  if (!body.url || typeof body.url !== "string" || !body.url.startsWith("http")) {
+    return c.json({ success: false, error: "올바른 상품 URL을 입력해주세요" }, 400);
+  }
+  if (!body.business_name || typeof body.business_name !== "string" || body.business_name.trim().length < 2) {
+    return c.json({ success: false, error: "사업자명은 2자 이상이어야 합니다" }, 400);
+  }
+
+  const salePrice = Number(body.sale_price) || 0;
+  const originalPrice = Number(body.original_price) || 0;
+  const discountRate = originalPrice > 0 && salePrice > 0 && salePrice < originalPrice
+    ? Math.round((1 - salePrice / originalPrice) * 100)
+    : 0;
+
+  const sourceId = `biz_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO deals
+      (title, description, original_price, sale_price, discount_rate, url, image_url, category, source, source_id, posted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+    ).bind(
+      body.title.trim(),
+      body.description?.trim() || "",
+      originalPrice || null,
+      salePrice || null,
+      discountRate || null,
+      body.url.trim(),
+      body.image_url?.trim() || null,
+      body.category?.trim() || "직접등록",
+      `biz:${body.business_name.trim()}`,
+      sourceId,
+    ).run();
+
+    return c.json({
+      success: true,
+      message: "상품이 등록되었습니다",
+      source_id: sourceId,
+    });
+  } catch (e) {
+    return c.json({ success: false, error: "등록 실패: " + (e instanceof Error ? e.message : "unknown") }, 500);
+  }
+});
+
+// 사업자 등록 상품 조회
+app.get("/api/deals/business", async (c) => {
+  const name = c.req.query("name") || "";
+  const limit = Math.min(Number(c.req.query("limit") || 50), 100);
+
+  let sql = "SELECT * FROM deals WHERE source LIKE 'biz:%'";
+  const params: string[] = [];
+
+  if (name) {
+    sql += " AND source = ?";
+    params.push(`biz:${name}`);
+  }
+
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  params.push(String(limit));
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ success: true, data: result.results });
 });
 
 // ===== 에이전트 마켓플레이스 =====
@@ -222,7 +408,7 @@ app.get("/api/agents/ranking", async (c) => {
      ORDER BY total_queries DESC, rating DESC`
   ).all();
 
-  const ranked = (agents.results as any[]).map((a, i) => {
+  const ranked = (agents.results as unknown as AgentRow[]).map((a, i) => {
     let badge = "";
     let tier = "";
     if (i === 0) { badge = "🥇"; tier = "1위"; }
@@ -249,8 +435,13 @@ app.get("/api/agents/:id", async (c) => {
   return c.json({ success: true, data: agent });
 });
 
-// 에이전트 등록
+// 에이전트 등록 (인증 필요)
 app.post("/api/agents/register", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token || token !== c.env.ADMIN_API_KEY) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
   const body = await c.req.json();
 
   if (!body.name || typeof body.name !== "string" || body.name.trim().length < 2 || body.name.trim().length > 50) {
@@ -276,15 +467,13 @@ app.post("/api/agents/register", async (c) => {
 });
 
 // === 에이전트 전략 엔진 ===
-type AgentStrategy = (query: string, allDeals: any[]) => { recommendation: string; confidence: number; reasoning: string; deals: any[] };
-
 const STRATEGIES: Record<string, AgentStrategy> = {
   // 최저가봇: 가격이 가장 낮은 상품 추천
   lowest_price: (query, allDeals) => {
     const withPrice = allDeals.filter(d => d.sale_price > 0).sort((a, b) => a.sale_price - b.sale_price);
     if (withPrice.length === 0) return { recommendation: `"${query}" 관련 할인 상품이 없습니다.`, confidence: 0.1, reasoning: "검색 결과 없음", deals: [] };
     const best = withPrice[0];
-    const avg = Math.round(withPrice.reduce((s: number, d: any) => s + d.sale_price, 0) / withPrice.length);
+    const avg = Math.round(withPrice.reduce((s, d) => s + (d.sale_price ?? 0), 0) / withPrice.length);
     const savings = avg > 0 ? Math.round((1 - best.sale_price / avg) * 100) : 0;
     return {
       recommendation: `🔥 ${best.title} — ${best.sale_price.toLocaleString()}원! 지금이 최저가입니다!`,
@@ -339,15 +528,15 @@ const STRATEGIES: Record<string, AgentStrategy> = {
   // 큐레이터봇: 다양한 소스에서 골라서 추천
   curator: (query, allDeals) => {
     // 소스별로 하나씩 골라서 다양하게 추천
-    const bySource: Record<string, any> = {};
+    const bySource: Record<string, DealRow> = {};
     for (const d of allDeals) {
       if (!bySource[d.source]) bySource[d.source] = d;
     }
-    const picks = Object.values(bySource).slice(0, 5) as any[];
+    const picks = Object.values(bySource).slice(0, 5);
     if (picks.length === 0) return { recommendation: `"${query}" 관련 상품이 없습니다.`, confidence: 0.1, reasoning: "검색 결과 없음", deals: [] };
 
-    const sources = picks.map((p: any) => p.source).join(", ");
-    const topPick = picks[0] as any;
+    const sources = picks.map(p => p.source).join(", ");
+    const topPick = picks[0];
     return {
       recommendation: `📋 오늘의 엄선: ${topPick.title}${topPick.sale_price ? ' — ' + topPick.sale_price.toLocaleString() + '원' : ''} 외 ${picks.length - 1}건`,
       confidence: Math.min(0.85, 0.4 + picks.length * 0.1),
@@ -405,7 +594,7 @@ const STRATEGIES: Record<string, AgentStrategy> = {
   // 카테고리봇: 카테고리별 전문 추천
   category_expert: (query, allDeals) => {
     // 카테고리별 그룹핑
-    const byCategory: Record<string, any[]> = {};
+    const byCategory: Record<string, DealRow[]> = {};
     for (const d of allDeals) {
       const cat = d.category || "기타";
       if (!byCategory[cat]) byCategory[cat] = [];
@@ -417,10 +606,10 @@ const STRATEGIES: Record<string, AgentStrategy> = {
     if (sorted.length === 0) return { recommendation: `"${query}" 관련 상품이 없습니다.`, confidence: 0.1, reasoning: "검색 결과 없음", deals: [] };
 
     // 각 카테고리에서 가성비 최고 1개씩
-    const picks: any[] = [];
+    const picks: DealRow[] = [];
     const catSummary: string[] = [];
     for (const [cat, items] of sorted.slice(0, 5)) {
-      const withPrice = items.filter((d: any) => d.sale_price > 0).sort((a: any, b: any) => a.sale_price - b.sale_price);
+      const withPrice = items.filter(d => (d.sale_price ?? 0) > 0).sort((a, b) => (a.sale_price ?? 0) - (b.sale_price ?? 0));
       const best = withPrice[0] || items[0];
       picks.push(best);
       catSummary.push(`${cat}(${items.length}건)`);
@@ -455,7 +644,7 @@ const STRATEGIES: Record<string, AgentStrategy> = {
 
     // 소스 다양하게
     const seen = new Set<string>();
-    const diverse: any[] = [];
+    const diverse: DealRow[] = [];
     for (const d of giftRange) {
       if (!seen.has(d.source)) {
         seen.add(d.source);
@@ -545,23 +734,23 @@ const STRATEGIES: Record<string, AgentStrategy> = {
   // 비교봇: 같은 상품 여러 소스 비교
   compare: (query, allDeals) => {
     // 소스별 최저가 비교
-    const bySource: Record<string, any> = {};
-    const withPrice = allDeals.filter(d => d.sale_price > 0);
+    const bySource: Record<string, DealRow> = {};
+    const withPrice = allDeals.filter(d => (d.sale_price ?? 0) > 0);
 
     for (const d of withPrice) {
-      if (!bySource[d.source] || d.sale_price < bySource[d.source].sale_price) {
+      if (!bySource[d.source] || (d.sale_price ?? 0) < (bySource[d.source].sale_price ?? 0)) {
         bySource[d.source] = d;
       }
     }
 
-    const sources = Object.entries(bySource).sort((a: any, b: any) => a[1].sale_price - b[1].sale_price);
+    const sources = Object.entries(bySource).sort((a, b) => (a[1].sale_price ?? 0) - (b[1].sale_price ?? 0));
     if (sources.length === 0) return { recommendation: `"${query}" 비교 데이터가 부족합니다.`, confidence: 0.1, reasoning: "데이터 부족", deals: [] };
 
     const cheapestSource = sources[0];
     const expensiveSource = sources[sources.length - 1];
-    const diff = (expensiveSource[1] as any).sale_price - (cheapestSource[1] as any).sale_price;
+    const diff = (expensiveSource[1].sale_price ?? 0) - (cheapestSource[1].sale_price ?? 0);
 
-    const comparison = sources.map(([src, d]: any) => `${src}: ${d.sale_price.toLocaleString()}원`).join(" vs ");
+    const comparison = sources.map(([src, d]) => `${src}: ${(d.sale_price ?? 0).toLocaleString()}원`).join(" vs ");
 
     return {
       recommendation: `🔍 가격비교: ${comparison}. ${cheapestSource[0]}이(가) 가장 저렴!`,
@@ -644,34 +833,42 @@ app.post("/api/agents/query", async (c) => {
       ).all();
     }
   }
-  const allDeals = dealsResult.results as any[];
+  const allDeals = dealsResult.results as unknown as DealRow[];
 
   // 각 에이전트가 자기 전략으로 응답 생성
   const responses = [];
-  for (const agent of agents.results as any[]) {
-    const strategyKey = (agent as any).api_key; // api_key를 전략 식별자로 사용
-    const strategyName = (agent as any).endpoint || "lowest_price"; // endpoint 필드를 전략 이름으로 활용
+  const batchStmts: D1PreparedStatement[] = [];
+
+  for (const agent of agents.results as unknown as AgentRow[]) {
+    const strategyName = agent.endpoint || "lowest_price";
     const strategy = STRATEGIES[strategyName] || STRATEGIES.lowest_price;
 
     const data = strategy(query, allDeals);
 
-    // 응답 기록
-    await c.env.DB.prepare(
-      "INSERT INTO agent_responses (agent_id, query, response, confidence) VALUES (?, ?, ?, ?)"
-    ).bind((agent as any).id, query, JSON.stringify(data), data.confidence || 0).run();
-
-    // 쿼리 수 증가
-    await c.env.DB.prepare(
-      "UPDATE agents SET total_queries = total_queries + 1 WHERE id = ?"
-    ).bind((agent as any).id).run();
+    // 배치에 추가 (N+1 → 배치)
+    batchStmts.push(
+      c.env.DB.prepare(
+        "INSERT INTO agent_responses (agent_id, query, response, confidence) VALUES (?, ?, ?, ?)"
+      ).bind(agent.id, query, JSON.stringify(data), data.confidence || 0)
+    );
+    batchStmts.push(
+      c.env.DB.prepare(
+        "UPDATE agents SET total_queries = total_queries + 1 WHERE id = ?"
+      ).bind(agent.id)
+    );
 
     responses.push({
-      agent_id: (agent as any).id,
-      agent_name: (agent as any).name,
-      commission_rate: (agent as any).commission_rate,
-      rating: (agent as any).rating,
+      agent_id: agent.id,
+      agent_name: agent.name,
+      commission_rate: agent.commission_rate,
+      rating: agent.rating,
       response: data,
     });
+  }
+
+  // 단일 배치로 실행 (이전: 에이전트당 2회 → 현재: 1회 배치)
+  if (batchStmts.length > 0) {
+    await c.env.DB.batch(batchStmts);
   }
 
   return c.json({ success: true, query, responses });
@@ -686,18 +883,15 @@ app.post("/api/agents/:id/review", async (c) => {
     return c.json({ success: false, error: "rating must be 1-5" }, 400);
   }
 
-  await c.env.DB.prepare(
-    "INSERT INTO agent_reviews (agent_id, rating, comment) VALUES (?, ?, ?)"
-  ).bind(agentId, body.rating, body.comment || "").run();
-
-  // 평균 평점 업데이트
-  const stats = await c.env.DB.prepare(
-    "SELECT AVG(rating) as avg_rating, COUNT(*) as count FROM agent_reviews WHERE agent_id = ?"
-  ).bind(agentId).first() as any;
-
-  await c.env.DB.prepare(
-    "UPDATE agents SET rating = ?, review_count = ? WHERE id = ?"
-  ).bind(stats.avg_rating, stats.count, agentId).run();
+  // 배치로 원자적 실행 (레이스 컨디션 방지)
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      "INSERT INTO agent_reviews (agent_id, rating, comment) VALUES (?, ?, ?)"
+    ).bind(agentId, body.rating, body.comment || ""),
+    c.env.DB.prepare(
+      "UPDATE agents SET rating = (SELECT AVG(rating) FROM agent_reviews WHERE agent_id = ?), review_count = (SELECT COUNT(*) FROM agent_reviews WHERE agent_id = ?) WHERE id = ?"
+    ).bind(agentId, agentId, agentId),
+  ]);
 
   return c.json({ success: true });
 });
@@ -731,7 +925,7 @@ app.get("/api/hot", async (c) => {
   ).all();
 
   // 인기도 점수 계산
-  const scored = (deals.results as any[]).map(d => {
+  const scored = (deals.results as unknown as DealRow[]).map(d => {
     let hotScore = 0;
 
     // 1. 추천수 (description에서 추출)
@@ -805,6 +999,26 @@ app.get("/api/trends", async (c) => {
       trendingSearches: recentQueries.results,
     },
   });
+});
+
+// 이미지 없는 딜 목록 (백필용)
+app.get("/api/backfill/no-image", async (c) => {
+  const limit = Math.min(Number(c.req.query("limit") || 50), 200);
+  const result = await c.env.DB.prepare(
+    "SELECT id, title, url, source FROM deals WHERE (image_url IS NULL OR image_url = '') ORDER BY created_at DESC LIMIT ?"
+  ).bind(limit).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// 딜 이미지 업데이트 (백필용)
+app.patch("/api/backfill/:id/image", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  if (!body.image_url || typeof body.image_url !== "string" || !body.image_url.startsWith("http")) {
+    return c.json({ success: false, error: "Valid image_url required" }, 400);
+  }
+  await c.env.DB.prepare("UPDATE deals SET image_url = ? WHERE id = ?").bind(body.image_url, id).run();
+  return c.json({ success: true });
 });
 
 // 헬스체크

@@ -2,77 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://everything-api.deri58.workers.dev";
-
-type AgentResponse = {
-  agent_id: number;
-  agent_name: string;
-  commission_rate: number;
-  rating: number;
-  response: {
-    recommendation: string;
-    confidence: number;
-    reasoning: string;
-    deals: any[];
-  };
-};
-
-type Deal = {
-  id: number;
-  title: string;
-  description: string;
-  original_price: number;
-  sale_price: number;
-  discount_rate: number;
-  url: string;
-  image_url: string;
-  category: string;
-  source: string;
-  posted_at: string;
-  hotScore?: number;
-  recommendations?: number;
-};
-
-type ChatMessage = {
-  role: "user" | "system";
-  text: string;
-};
-
-const AGENT_ICONS: Record<string, string> = {
-  "최저가봇": "💰", "인기봇": "🔥", "큐레이터봇": "🎯", "타임딜봇": "⚡",
-  "알뜰봇": "🏷️", "가격예측봇": "📊", "비교봇": "⚖️", "선물봇": "🎁",
-  "가성비봇": "💎", "어드바이저봇": "🧠", "카테고리봇": "📂", "트렌드봇": "📈",
-};
-
-const SOURCE_NAMES: Record<string, string> = {
-  coupang: "쿠팡", "11st": "11번가", danawa: "다나와", ppomppu: "뽐뿌",
-  ruliweb: "루리웹", clien: "클리앙", fmkorea: "FM코리아", quasarzone: "퀘사이저존",
-  gsshop: "GS샵", lotteon: "롯데온", naver_shopping: "네이버쇼핑",
-};
-
-const SOURCE_COLORS: Record<string, string> = {
-  coupang: "#e44232", "11st": "#ff0038", danawa: "#0070c0", ppomppu: "#0d5aa7",
-  ruliweb: "#002b5c", clien: "#4caf50", fmkorea: "#3b5998", quasarzone: "#1a1a2e",
-  gsshop: "#ec008c", naver_shopping: "#03c75a",
-};
-
-function formatPrice(price: number) {
-  if (!price) return "";
-  return price.toLocaleString() + "원";
-}
-
-function timeAgo(dateStr: string) {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "방금";
-  if (mins < 60) return `${mins}분 전`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  const days = Math.floor(hours / 24);
-  return `${days}일 전`;
-}
+import {
+  API_URL, Deal, AgentResponse, ChatMessage,
+  AGENT_ICONS, AGENT_INTROS, SOURCE_NAMES, SOURCE_COLORS,
+  formatPrice, timeAgo, sanitizeUrl,
+} from "@/lib/shared";
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -80,7 +14,8 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "chatting" | "agents">("idle");
+  const [phase, setPhase] = useState<"idle" | "chatting" | "confirm" | "agents">("idle");
+  const [pendingQuery, setPendingQuery] = useState<{ query: string; parsed: { product?: string; specs?: Record<string, string>; budget?: string; keywords?: string[] } | null } | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [feedTab, setFeedTab] = useState<"hot" | "latest">("hot");
   const [feedFilter, setFeedFilter] = useState("all");
@@ -132,18 +67,19 @@ export default function Home() {
 
       if (data.success) {
         const reply = data.reply || "어떤 상품을 찾고 계신가요?";
-        const updated = [...newMsgs, { role: "system" as const, text: reply }];
+        const options = data.options || [];
+        const updated = [...newMsgs, { role: "system" as const, text: reply, options }];
         setChatMsgs(updated);
 
-        // LLM이 니즈 파악 완료했으면 에이전트에게 전달
+        // LLM이 니즈 파악 완료했으면 확인 단계로
         if (data.ready && data.query) {
-          setPhase("agents");
           const keywords = data.query.keywords || [];
           const product = data.query.product || "";
           const specs = data.query.specs ? Object.values(data.query.specs).join(" ") : "";
           const budget = data.query.budget || "";
           const finalQuery = `${product} ${specs} ${budget} ${keywords.join(" ")}`.trim();
-          sendToAgents(finalQuery);
+          setPendingQuery({ query: finalQuery, parsed: data.query });
+          setPhase("confirm");
         }
       }
     } catch (err) {
@@ -182,9 +118,10 @@ export default function Home() {
     const newMsgs = [...chatMsgs, { role: "user" as const, text }];
     setChatMsgs(newMsgs);
 
-    if (phase === "idle" || phase === "agents") {
+    if (phase === "idle" || phase === "agents" || phase === "confirm") {
       setPhase("chatting");
       setAgentResponses([]);
+      setPendingQuery(null);
     }
     sendChat(newMsgs);
   };
@@ -194,9 +131,37 @@ export default function Home() {
     if (chatMsgs.length === 0) return;
     const userMsgs = chatMsgs.filter(m => m.role === "user").map(m => m.text);
     const query = userMsgs.join(" ");
+    setPendingQuery({ query, parsed: null });
+    setPhase("confirm");
+    setChatMsgs(prev => [...prev, { role: "system", text: "이 정도면 충분할까요?" }]);
+  };
+
+  // 확인 후 에이전트에게 보내기
+  const handleConfirmSend = () => {
+    if (!pendingQuery) return;
     setPhase("agents");
-    setChatMsgs(prev => [...prev, { role: "system", text: "알겠어요! 에이전트들에게 바로 물어볼게요." }]);
-    sendToAgents(query);
+    setChatMsgs(prev => [...prev, { role: "system", text: "좋아요! 에이전트들에게 물어볼게요." }]);
+    sendToAgents(pendingQuery.query);
+    setPendingQuery(null);
+  };
+
+  // 선택지 클릭
+  const handleOptionClick = (option: string) => {
+    if (chatLoading) return;
+    const newMsgs = [...chatMsgs, { role: "user" as const, text: option }];
+    setChatMsgs(newMsgs);
+    if (phase === "confirm") {
+      setPhase("chatting");
+      setPendingQuery(null);
+    }
+    sendChat(newMsgs);
+  };
+
+  // 더 대화하기
+  const handleContinueChat = () => {
+    setPhase("chatting");
+    setPendingQuery(null);
+    setChatMsgs(prev => [...prev, { role: "system", text: "좋아요, 더 알려주세요! 어떤 부분이 더 궁금하세요?" }]);
   };
 
   // 새 대화
@@ -206,13 +171,14 @@ export default function Home() {
     setAgentResponses([]);
     setAgentLoading(false);
     setChatLoading(false);
+    setPendingQuery(null);
   };
 
   return (
     <div className="main">
       <header className="header">
         <span className="header-link" onClick={() => router.push("/agents")} style={{ cursor: "pointer" }}>에이전트</span>
-        <span className="header-link">에이전트 등록</span>
+        <span className="header-link" onClick={() => router.push("/submit")} style={{ cursor: "pointer" }}>상품 등록</span>
         <span className="header-link">API 문서</span>
       </header>
 
@@ -267,7 +233,7 @@ export default function Home() {
               <div className="feed-filters">
                 {["all", ...Array.from(new Set(deals.map(d => d.source)))].map(s => (
                   <button key={s} className={`filter-btn ${feedFilter === s ? "active" : ""}`} onClick={() => setFeedFilter(s)}>
-                    {s === "all" ? "전체" : SOURCE_NAMES[s] || s}
+                    {s === "all" ? "전체" : s.startsWith("biz:") ? s.replace("biz:", "") : SOURCE_NAMES[s] || s}
                   </button>
                 ))}
               </div>
@@ -280,7 +246,7 @@ export default function Home() {
             ) : (
               <div className="deal-grid">
                 {(feedFilter === "all" ? deals : deals.filter(d => d.source === feedFilter)).map((deal) => (
-                  <a key={deal.id} href={deal.url} target="_blank" rel="noopener noreferrer" className={`deal-card ${deal.hotScore && deal.hotScore > 30 ? "deal-hot" : ""}`}>
+                  <a key={deal.id} href={sanitizeUrl(deal.url)} target="_blank" rel="noopener noreferrer" className={`deal-card ${deal.hotScore && deal.hotScore > 30 ? "deal-hot" : ""}`}>
                     {deal.hotScore && deal.hotScore > 30 && (
                       <div className="hot-score-bar">
                         <span className="hot-fire">🔥 HOT</span>
@@ -291,7 +257,7 @@ export default function Home() {
                     )}
                     <div className="deal-image">
                       {deal.image_url ? (
-                        <img src={deal.image_url} alt={deal.title} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        <img src={deal.image_url} alt={deal.title} loading="lazy" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       ) : (
                         <div className="deal-image-placeholder">
                           <span>{SOURCE_NAMES[deal.source] || deal.source}</span>
@@ -300,8 +266,8 @@ export default function Home() {
                     </div>
                     <div className="deal-body">
                       <div className="deal-source">
-                        <span className="deal-source-badge" style={{ background: SOURCE_COLORS[deal.source] || "#5f6368" }}>
-                          {SOURCE_NAMES[deal.source] || deal.source}
+                        <span className="deal-source-badge" style={{ background: deal.source.startsWith("biz:") ? "#6c5ce7" : (SOURCE_COLORS[deal.source] || "#5f6368") }}>
+                          {deal.source.startsWith("biz:") ? deal.source.replace("biz:", "") : (SOURCE_NAMES[deal.source] || deal.source)}
                         </span>
                         <span className="deal-time">{timeAgo(deal.posted_at)}</span>
                       </div>
@@ -343,11 +309,22 @@ export default function Home() {
 
           <div className="chat-messages">
             {chatMsgs.map((msg, i) => (
-              <div key={i} className={`chat-msg ${msg.role}`}>
-                {msg.role === "system" && <div className="chat-bot-icon">E</div>}
-                <div className={`chat-bubble ${msg.role}`}>
-                  <p>{msg.text}</p>
+              <div key={i}>
+                <div className={`chat-msg ${msg.role}`}>
+                  {msg.role === "system" && <div className="chat-bot-icon">E</div>}
+                  <div className={`chat-bubble ${msg.role}`}>
+                    <p>{msg.text}</p>
+                  </div>
                 </div>
+                {msg.role === "system" && msg.options && msg.options.length > 0 && (
+                  <div className="chat-options" style={i !== chatMsgs.length - 1 ? { opacity: 0.5, pointerEvents: "none" } : {}}>
+                    {msg.options.map((opt, j) => (
+                      <button key={j} className="chat-option-btn" onClick={() => handleOptionClick(opt)}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
 
@@ -368,6 +345,60 @@ export default function Home() {
                 <button className="skip-btn" onClick={handleDirectSend}>
                   이 정도면 충분해요 — 에이전트에게 물어보기
                 </button>
+              </div>
+            )}
+
+            {/* 확인 단계 */}
+            {phase === "confirm" && pendingQuery && (
+              <div className="confirm-section">
+                <div className="confirm-card">
+                  <div className="confirm-title">이 정도면 충분할까요?</div>
+                  <div className="confirm-summary">
+                    {pendingQuery.parsed ? (
+                      <div className="confirm-details">
+                        {pendingQuery.parsed.product && (
+                          <div className="confirm-item">
+                            <span className="confirm-label">상품</span>
+                            <span>{pendingQuery.parsed.product}</span>
+                          </div>
+                        )}
+                        {pendingQuery.parsed.specs && Object.keys(pendingQuery.parsed.specs).length > 0 && (
+                          <div className="confirm-item">
+                            <span className="confirm-label">조건</span>
+                            <span>{Object.entries(pendingQuery.parsed.specs).map(([k, v]) => `${k}: ${v}`).join(", ")}</span>
+                          </div>
+                        )}
+                        {pendingQuery.parsed.budget && (
+                          <div className="confirm-item">
+                            <span className="confirm-label">예산</span>
+                            <span>{pendingQuery.parsed.budget}</span>
+                          </div>
+                        )}
+                        {pendingQuery.parsed.keywords && pendingQuery.parsed.keywords.length > 0 && (
+                          <div className="confirm-item">
+                            <span className="confirm-label">검색어</span>
+                            <span>{pendingQuery.parsed.keywords.join(", ")}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="confirm-details">
+                        <div className="confirm-item">
+                          <span className="confirm-label">검색어</span>
+                          <span>{pendingQuery.query}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="confirm-buttons">
+                    <button className="confirm-btn-yes" onClick={handleConfirmSend}>
+                      네, 에이전트에게 물어보기
+                    </button>
+                    <button className="confirm-btn-no" onClick={handleContinueChat}>
+                      아니요, 더 말할게 있어요
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -411,15 +442,18 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                      {AGENT_INTROS[r.agent_name] && (
+                        <div className="agent-intro">{AGENT_INTROS[r.agent_name]}</div>
+                      )}
                       <div className="agent-response-text">{r.response.recommendation}</div>
                       <div className="agent-response-reason">{r.response.reasoning}</div>
                       {r.response.deals && r.response.deals.length > 0 && (
                         <div className="agent-deal-cards">
-                          {r.response.deals.slice(0, 2).map((deal: any, j: number) => (
-                            <a key={j} href={deal.url} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
+                          {r.response.deals.slice(0, 2).map((deal, j) => (
+                            <a key={j} href={sanitizeUrl(deal.url)} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
                               {deal.image_url && (
                                 <div className="agent-deal-img">
-                                  <img src={deal.image_url} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <img src={deal.image_url} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 </div>
                               )}
                               <div className="agent-deal-info">
@@ -440,7 +474,7 @@ export default function Home() {
           </div>
 
           {/* 입력창 (대화 중 + 에이전트 결과 후에도 계속 대화 가능) */}
-          {(phase === "chatting" || phase === "agents") && (
+          {(phase === "chatting" || phase === "agents" || phase === "confirm") && (
             <form className="chat-input-form" onSubmit={handleSubmit}>
               <input
                 ref={chatInputRef}
@@ -448,7 +482,7 @@ export default function Home() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={phase === "agents" ? "추가 질문이 있으면 입력하세요..." : "답변을 입력하세요..."}
+                placeholder={phase === "confirm" ? "더 추가할 내용을 입력하세요..." : phase === "agents" ? "추가 질문이 있으면 입력하세요..." : "답변을 입력하세요..."}
                 autoFocus
                 disabled={chatLoading}
               />
