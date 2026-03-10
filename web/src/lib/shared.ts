@@ -37,6 +37,89 @@ export type ChatMessage = {
   options?: string[];
 };
 
+// === Delivery Types ===
+
+export type Store = {
+  id: number;
+  name: string;
+  address: string;
+  road_address: string;
+  phone: string;
+  category: string;
+  lat: number;
+  lng: number;
+  verified: boolean;
+  menu_info: string;
+  image_url: string;
+  rating: number;
+  review_count: number;
+};
+
+export type DeliveryOrder = {
+  id: number;
+  consumer_request: string;
+  area: string;
+  food_type: string;
+  budget: number;
+  quantity: string;
+  status: string;
+  selected_agent_id: number;
+  selected_driver_id: number;
+  final_price: number;
+  store_id: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentBid = {
+  id: number;
+  order_id: number;
+  agent_id: number;
+  agent_name?: string;
+  proposed_store_id: number;
+  store_name?: string;
+  proposed_price: number;
+  delivery_fee: number;
+  total_price: number;
+  message: string;
+  created_at: string;
+};
+
+export type DriverBid = {
+  id: number;
+  order_id: number;
+  driver_id: number;
+  driver_name?: string;
+  proposed_fee: number;
+  estimated_time: number;
+  message: string;
+  created_at: string;
+};
+
+export type Driver = {
+  id: number;
+  name: string;
+  phone: string;
+  area: string;
+  vehicle_type: string;
+  status: string;
+  rating: number;
+  review_count: number;
+  total_deliveries: number;
+};
+
+// Delivery status labels
+export const DELIVERY_STATUS: Record<string, { label: string; color: string }> = {
+  pending: { label: "대기중", color: "#9e9e9e" },
+  agent_bidding: { label: "에이전트 입찰중", color: "#ff9800" },
+  agent_selected: { label: "에이전트 선택됨", color: "#2196f3" },
+  driver_bidding: { label: "기사 입찰중", color: "#ff9800" },
+  driver_assigned: { label: "기사 배정됨", color: "#2196f3" },
+  delivering: { label: "배달중", color: "#4caf50" },
+  delivered: { label: "배달 완료", color: "#4caf50" },
+  reviewed: { label: "평가 완료", color: "#9c27b0" },
+};
+
 // === Constants ===
 
 export const AGENT_ICONS: Record<string, string> = {

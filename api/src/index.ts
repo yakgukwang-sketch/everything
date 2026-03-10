@@ -47,6 +47,130 @@ interface AgentStrategyResult {
 
 type AgentStrategy = (query: string, allDeals: DealRow[]) => AgentStrategyResult;
 
+interface StoreRow {
+  id: number;
+  name: string;
+  address: string;
+  road_address: string;
+  phone: string;
+  category: string;
+  lat: number;
+  lng: number;
+  verified: boolean;
+  menu_info: string;
+  image_url: string;
+  rating: number;
+  review_count: number;
+}
+
+interface DeliveryOrderRow {
+  id: number;
+  consumer_request: string;
+  area: string;
+  food_type: string;
+  budget: number;
+  quantity: string;
+  status: string;
+  selected_agent_id: number;
+  selected_driver_id: number;
+  final_price: number;
+  store_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DriverRow {
+  id: number;
+  name: string;
+  phone: string;
+  area: string;
+  vehicle_type: string;
+  status: string;
+  rating: number;
+  review_count: number;
+  total_deliveries: number;
+  created_at: string;
+}
+
+// 배달 에이전트 전략: 각 에이전트가 가게를 다른 기준으로 추천
+interface DeliveryBidStrategy {
+  name: string;
+  description: string;
+  selectStore: (stores: StoreRow[], budget: number) => { store: StoreRow | null; reasoning: string };
+  calculateFee: (budget: number) => number;
+}
+
+const DELIVERY_STRATEGIES: Record<string, DeliveryBidStrategy> = {
+  // 최저가 에이전트: 가장 저렴한 가게 추천
+  lowest_price: {
+    name: "최저가",
+    description: "가장 저렴한 가게를 찾아드려요",
+    selectStore: (stores, _budget) => {
+      // menu_info에서 가격 파싱 시도, 없으면 rating 낮은 순 (저렴할 가능성)
+      const sorted = [...stores].sort((a, b) => (a.rating || 5) - (b.rating || 5));
+      const store = sorted[0] || null;
+      return { store, reasoning: store ? `${store.name}은(는) 가성비가 좋기로 유명합니다. 저렴한 가격에 만족스러운 맛!` : "해당 지역에 관련 가게가 없습니다" };
+    },
+    calculateFee: (budget) => Math.max(2000, Math.round(budget * 0.05)),
+  },
+  // 맛집 에이전트: 평점 높은 가게 추천
+  popular: {
+    name: "맛집",
+    description: "평점 최고 맛집을 추천해요",
+    selectStore: (stores, _budget) => {
+      const sorted = [...stores].sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.review_count || 0) - (a.review_count || 0));
+      const store = sorted[0] || null;
+      return { store, reasoning: store ? `${store.name} — 평점 ${store.rating}점, 리뷰 ${store.review_count}개! 검증된 맛집입니다.` : "해당 지역에 관련 가게가 없습니다" };
+    },
+    calculateFee: (budget) => Math.max(3000, Math.round(budget * 0.08)),
+  },
+  // 가까운 가게 에이전트: 빠른 배달 우선
+  best_discount: {
+    name: "빠른배달",
+    description: "가장 가까운 가게로 빠르게 배달해요",
+    selectStore: (stores, _budget) => {
+      // verified 가게 우선 (검증된 = 자주 주문되는 = 빠른 조리)
+      const sorted = [...stores].sort((a, b) => (b.verified ? 1 : 0) - (a.verified ? 1 : 0));
+      const store = sorted[0] || null;
+      return { store, reasoning: store ? `${store.name}은(는) 검증된 가게라 조리가 빠르고 배달이 신속합니다!` : "해당 지역에 관련 가게가 없습니다" };
+    },
+    calculateFee: (budget) => Math.max(2500, Math.round(budget * 0.06)),
+  },
+  // 큐레이터 에이전트: 종합 분석
+  curator: {
+    name: "큐레이터",
+    description: "가격·맛·속도 종합 분석해요",
+    selectStore: (stores, budget) => {
+      const scored = stores.map(s => {
+        let score = 0;
+        score += (s.rating || 0) * 20;
+        score += (s.review_count || 0) * 0.5;
+        if (s.verified) score += 30;
+        // 예산 고려: 리뷰 많으면 합리적 가격일 가능성
+        if (s.review_count > 50 && budget > 0) score += 20;
+        return { store: s, score };
+      }).sort((a, b) => b.score - a.score);
+      const best = scored[0];
+      return {
+        store: best?.store || null,
+        reasoning: best?.store ? `${best.store.name} — 맛, 가격, 배달 속도를 종합 분석한 최적의 선택입니다!` : "해당 지역에 관련 가게가 없습니다",
+      };
+    },
+    calculateFee: (budget) => Math.max(2500, Math.round(budget * 0.07)),
+  },
+  // 리뷰 많은 가게 에이전트
+  value: {
+    name: "리뷰왕",
+    description: "리뷰가 많은 검증된 가게를 추천해요",
+    selectStore: (stores, _budget) => {
+      const sorted = [...stores].sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
+      const store = sorted[0] || null;
+      return { store, reasoning: store ? `${store.name} — 리뷰 ${store.review_count}개! 많은 사람들이 선택한 데는 이유가 있습니다.` : "해당 지역에 관련 가게가 없습니다" };
+    },
+    calculateFee: (budget) => Math.max(2500, Math.round(budget * 0.06)),
+  },
+};
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("/*", cors({
@@ -68,45 +192,59 @@ function sanitizeUrl(url: string): string {
 }
 
 // Gemini 대화형 니즈 파악
-const CHAT_SYSTEM_PROMPT = `너는 쇼핑 어시스턴트야. 소비자가 뭘 사고 싶은지 자연스러운 대화로 파악해.
+const CHAT_SYSTEM_PROMPT = `너는 만능 어시스턴트야. 소비자가 뭘 원하는지 자연스러운 대화로 파악해.
+
+중요: 요청은 크게 2가지 타입이 있어:
+A) **배달/음식 주문** — 음식 이름이 나오면 무조건 배달이야. "제육볶음", "치킨", "피자", "족발", "떡볶이", "짜장면", "삼겹살", "곱창", "햄버거", "초밥" 등 음식 이름이 나오면 type을 "delivery"로.
+B) **쇼핑/상품 검색** — 전자기기, 옷, 가구 등은 "shopping"
 
 규칙:
 1. 한 번에 질문 하나만 해. 짧고 친근하게.
 2. 소비자가 모호하게 말하면 구체적으로 좁혀나가.
-3. 반드시 아래 3가지를 모두 파악한 후에만 [READY]를 출력해:
-   - 상품 종류 (구체적으로 뭘 사려는지)
-   - 용도 또는 대상 (누가 쓸 건지, 어디에 쓸 건지)
-   - 예산 (대략적인 가격대)
-   3가지를 모두 파악하기 전에는 절대 [READY]를 출력하지 마.
-   3가지를 모두 파악했으면 더 질문하지 말고 바로 [READY]를 출력해.
-4. 매 질문마다 반드시 선택지를 제공해. 아래 형식으로:
+
+### 배달 (type: delivery)인 경우:
+파악할 것 3가지:
+- 음식 종류 (뭘 먹고 싶은지)
+- 지역 + 수량 (어디서, 몇 인분)
+- 예산 (얼마 이하)
+3가지 모두 파악하면 즉시:
+[READY]
+{"type":"delivery","food":"제육볶음","area":"부천","quantity":"4인분","budget":"40000","keywords":["제육볶음","매콤"]}
+[/READY]
+
+### 쇼핑 (type: shopping)인 경우:
+파악할 것 3가지:
+- 상품 종류
+- 용도/대상
+- 예산
+3가지 모두 파악하면 즉시:
+[READY]
+{"type":"shopping","product":"상품명","specs":{"key":"value"},"budget":"예산","keywords":["키워드1","키워드2"]}
+[/READY]
+
+공통 규칙:
+3. 3가지를 모두 파악하기 전에는 절대 [READY]를 출력하지 마.
+4. 매 질문마다 반드시 선택지를 제공해:
 
 [OPTIONS]
 선택지1|선택지2|선택지3|선택지4
 [/OPTIONS]
 
-예시:
-어떤 종류의 식재료를 찾아?
-[OPTIONS]
-고기류|해산물|채소/과일|밀키트/간편식
-[/OPTIONS]
-
 5. 선택지는 2~5개. 짧고 명확하게 (10자 이내).
-6. 3가지를 모두 파악했으면 반드시 아래 JSON 형식으로 정리해서 응답해:
+6. 아직 정보가 부족하면 [READY] 없이 다음 질문 + 선택지.
+7. 인사나 관계없는 말에는 "뭐 찾고 있어? 쇼핑이야 배달이야?" + 선택지로 답해.
+8. 반말로 친근하게 대화해.
+9. 사용자가 "찾아줘", "충분해", "됐어" 같이 대화를 끝내려 해도 3가지 정보가 부족하면 부족한 것만 빠르게 물어봐.
+10. 3가지 조건 중 대략적이라도 알 수 있으면 OK. 예: "2~3만원" → 예산 OK, "혼자" → 1인분.
+11. 3가지가 갖춰지면 추가 질문 없이 즉시 [READY]를 출력해.
 
-[READY]
-{"product":"상품명","specs":{"key":"value"},"budget":"예산","keywords":["검색키워드1","검색키워드2"]}
-[/READY]
-
-7. 아직 정보가 부족하면 [READY] 없이 다음 질문 + 선택지.
-8. 인사나 관계없는 말에는 "안녕하세요! 어떤 상품을 찾고 계신가요?" + 선택지로 답해.
-9. 반말로 친근하게 대화해.
-10. 사용자가 "찾아줘", "충분해", "됐어" 같이 대화를 끝내려 해도 3가지 정보가 부족하면 부족한 것만 빠르게 물어봐.
-11. 3가지 조건 체크 기준:
-   - 상품 종류: "이어폰", "목걸이", "노트북", "선물" 등 카테고리만 나와도 OK
-   - 용도/대상: "음악용", "친구 생일", "운동할 때" 등 간단한 맥락이면 OK
-   - 예산: "3만원", "10만원대", "싼 거" 등 대략적이면 OK
-   이 3가지가 갖춰지면 추가 질문 없이 즉시 [READY]를 출력해.`;
+배달 예시 대화:
+유저: "제육볶음 추천해줘"
+→ 음식이니까 배달! "어디로 배달할까?"
+유저: "부천"
+→ "몇 인분 시킬까?"
+유저: "2인분 3만원"
+→ [READY]{"type":"delivery","food":"제육볶음","area":"부천","quantity":"2인분","budget":"30000","keywords":["제육볶음"]}[/READY]`;
 
 app.post("/api/chat", async (c) => {
   try {
@@ -196,12 +334,39 @@ app.post("/api/chat", async (c) => {
       // 대화 내용에서 키워드 추출
       const keywords = allUserText.split(/[\s,|]+/).filter((w: string) => w.length >= 2 && !/^(나|네|응|좋|음|걍|그냥|뭐|이|그|저)$/.test(w));
 
+      // 음식/배달 감지
+      const foodKeywords = ["제육", "치킨", "피자", "족발", "보쌈", "떡볶이", "짜장", "짬뽕", "탕수육", "삼겹살", "곱창", "냉면", "김밥", "돈까스", "초밥", "회", "햄버거", "분식", "라멘", "파스타", "볶음밥", "국밥", "설렁탕", "갈비", "만두", "커피", "중국집", "한식", "양식", "일식"];
+      const areaKeywords = ["강남", "강북", "강서", "강동", "송파", "마포", "종로", "서초", "관악", "영등포", "구로", "동대문", "성북", "노원", "은평", "도봉", "중랑", "광진", "동작", "양천", "용산", "부천", "인천", "서울", "수원", "성남", "안양", "고양", "용인", "화성", "시흥", "광명", "김포", "의정부", "파주", "일산", "분당", "판교", "동탄"];
+      const isFood = foodKeywords.some(f => allUserText.includes(f));
+      const detectedArea = areaKeywords.find(a => allUserText.includes(a)) || "";
+      const quantityMatch = allUserText.match(/(\d+)\s*(인분|그릇|마리|판|개)/);
+
+      // 배달은 음식 + 지역 + (예산 OR 수량) 3가지 있어야 트리거
+      if (isFood && detectedArea && (budget || quantityMatch)) {
+        const food = foodKeywords.find(f => allUserText.includes(f)) || keywords[0];
+        return c.json({
+          success: true,
+          reply,
+          ready: true,
+          query: {
+            type: "delivery",
+            food,
+            area: detectedArea || "부천",
+            quantity: quantityMatch ? quantityMatch[0] : "1인분",
+            budget: budget || "30000",
+            keywords: keywords.slice(0, 5),
+          },
+          options,
+        });
+      }
+
       if (budget && keywords.length >= 2) {
         return c.json({
           success: true,
           reply,
           ready: true,
           query: {
+            type: "shopping",
             product: keywords.slice(0, 3).join(" "),
             specs: {},
             budget,
@@ -1085,9 +1250,613 @@ app.patch("/api/backfill/:id/image", async (c) => {
   return c.json({ success: true });
 });
 
+// ===== 가게 (Store) =====
+
+// 가게 검색
+app.get("/api/stores", async (c) => {
+  const q = c.req.query("q") || "";
+  const category = c.req.query("category") || "";
+  const verified = c.req.query("verified");
+  const limit = Math.min(Math.max(1, Number(c.req.query("limit") || 20)), 100);
+  const offset = Math.max(0, Number(c.req.query("offset") || 0));
+
+  let sql = "SELECT * FROM stores WHERE 1=1";
+  const params: (string | number)[] = [];
+
+  if (q) {
+    sql += " AND (name LIKE ? OR address LIKE ? OR road_address LIKE ?)";
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+
+  if (category) {
+    sql += " AND category = ?";
+    params.push(category);
+  }
+
+  if (verified === "true") {
+    sql += " AND verified = 1";
+  } else if (verified === "false") {
+    sql += " AND verified = 0";
+  }
+
+  sql += " ORDER BY rating DESC, review_count DESC LIMIT ? OFFSET ?";
+  params.push(limit, offset);
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({
+    success: true,
+    data: result.results,
+    meta: { total: result.results.length, offset, limit },
+  });
+});
+
+// 가게 등록 (크롤러용 — 인증 필요)
+app.post("/api/stores", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token || token !== c.env.ADMIN_API_KEY) {
+    return c.json({ success: false, error: "Unauthorized" }, 401);
+  }
+
+  const body = await c.req.json();
+  const stores = Array.isArray(body) ? body : [body];
+
+  if (stores.length > 200) {
+    return c.json({ success: false, error: "Maximum 200 stores per request" }, 400);
+  }
+
+  let inserted = 0;
+
+  for (const store of stores) {
+    if (!store.name) continue;
+
+    try {
+      await c.env.DB.prepare(
+        `INSERT OR REPLACE INTO stores
+        (name, address, road_address, phone, category, lat, lng, naver_id, kakao_id, verified, menu_info, image_url, rating, review_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        store.name,
+        store.address || null,
+        store.road_address || null,
+        store.phone || null,
+        store.category || null,
+        store.lat || null,
+        store.lng || null,
+        store.naver_id || null,
+        store.kakao_id || null,
+        store.verified ? 1 : 0,
+        store.menu_info || null,
+        store.image_url || null,
+        store.rating || 0,
+        store.review_count || 0,
+      ).run();
+      inserted++;
+    } catch (e) {
+      console.error("Store insert failed:", e);
+    }
+  }
+
+  return c.json({ success: true, inserted });
+});
+
+// 가게 상세
+app.get("/api/stores/:id", async (c) => {
+  const id = c.req.param("id");
+  const result = await c.env.DB.prepare("SELECT * FROM stores WHERE id = ?").bind(id).first();
+
+  if (!result) {
+    return c.json({ success: false, error: "Not found" }, 404);
+  }
+
+  return c.json({ success: true, data: result });
+});
+
+// ===== 배달 서비스 =====
+
+// 배달 주문 생성 (소비자)
+app.post("/api/delivery/request", async (c) => {
+  const body = await c.req.json();
+
+  if (!body.consumer_request || typeof body.consumer_request !== "string") {
+    return c.json({ success: false, error: "consumer_request is required" }, 400);
+  }
+
+  // 1. 주문 생성
+  const orderResult = await c.env.DB.prepare(
+    `INSERT INTO delivery_orders (consumer_request, area, food_type, budget, quantity, status)
+     VALUES (?, ?, ?, ?, ?, 'agent_bidding')`
+  ).bind(
+    body.consumer_request,
+    body.area || null,
+    body.food_type || null,
+    body.budget || null,
+    body.quantity || null,
+  ).run();
+
+  const orderId = orderResult.meta.last_row_id;
+
+  // 2. 해당 지역+음식 타입으로 가게 검색
+  let storesSql = "SELECT * FROM stores WHERE 1=1";
+  const storeParams: string[] = [];
+
+  if (body.food_type) {
+    storesSql += " AND (category LIKE ? OR name LIKE ? OR menu_info LIKE ?)";
+    storeParams.push(`%${body.food_type}%`, `%${body.food_type}%`, `%${body.food_type}%`);
+  }
+  if (body.area) {
+    storesSql += " AND (address LIKE ? OR road_address LIKE ?)";
+    storeParams.push(`%${body.area}%`, `%${body.area}%`);
+  }
+
+  storesSql += " ORDER BY rating DESC LIMIT 20";
+  const storesResult = await c.env.DB.prepare(storesSql).bind(...storeParams).all();
+  const matchedStores = storesResult.results as unknown as StoreRow[];
+
+  // 3. 활성 에이전트 목록
+  const agents = await c.env.DB.prepare(
+    "SELECT id, name, endpoint FROM agents WHERE status = 'active' ORDER BY rating DESC"
+  ).all();
+
+  // 4. 각 에이전트가 자기 전략으로 입찰 생성
+  const bids = [];
+  const batchStmts: D1PreparedStatement[] = [];
+  const budget = body.budget || 0;
+
+  for (const agent of agents.results as unknown as AgentRow[]) {
+    const strategyName = agent.endpoint || "lowest_price";
+    const strategy = DELIVERY_STRATEGIES[strategyName] || DELIVERY_STRATEGIES.curator;
+
+    const { store, reasoning } = strategy.selectStore(matchedStores, budget);
+    const deliveryFee = strategy.calculateFee(budget);
+
+    // 가게 데이터 없을 때 — 에이전트별로 다른 가격/메시지 생성
+    const foodType = body.food_type || "음식";
+    const area = body.area || "해당 지역";
+    let finalMessage = reasoning;
+    let proposedPrice = budget > 0 ? budget : 30000;
+    let storeName = store?.name || "";
+
+    if (!store && matchedStores.length === 0) {
+      // 가게 DB에 데이터가 없을 때: 에이전트별 차별화된 제안
+      const variance = Math.round((Math.random() * 0.2 - 0.1) * proposedPrice);
+      proposedPrice = Math.max(10000, proposedPrice + variance);
+      const fakeStoreNames: Record<string, string> = {
+        lowest_price: `${area} 착한${foodType}`,
+        popular: `${area} 맛집 ${foodType}전문점`,
+        best_discount: `${area} ${foodType} 빠른배달`,
+        curator: `${area} 베스트 ${foodType}`,
+        value: `${area} 인기 ${foodType}집`,
+      };
+      storeName = fakeStoreNames[strategyName] || `${area} ${foodType} 추천맛집`;
+      const messages: Record<string, string> = {
+        lowest_price: `${area}에서 제일 저렴한 ${foodType}! ${proposedPrice.toLocaleString()}원이면 충분해요. 가성비 최고!`,
+        popular: `${area} ${foodType} 맛집 중 평점 최고! 맛 보장합니다.`,
+        best_discount: `빠른 배달에 집중! ${area}에서 가장 빨리 도착하는 ${foodType}을 찾았어요.`,
+        curator: `맛, 가격, 배달 속도 종합 분석! ${area} ${foodType} 최적의 선택입니다.`,
+        value: `리뷰가 많은 검증된 ${foodType}집! 많은 사람들이 선택한 데는 이유가 있어요.`,
+      };
+      finalMessage = messages[strategyName] || `${area} ${foodType} 추천 가게를 찾았어요!`;
+    }
+
+    const totalPrice = proposedPrice + deliveryFee;
+
+    batchStmts.push(
+      c.env.DB.prepare(
+        `INSERT INTO agent_bids (order_id, agent_id, proposed_store_id, proposed_price, delivery_fee, total_price, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        orderId,
+        agent.id,
+        store?.id || null,
+        proposedPrice,
+        deliveryFee,
+        totalPrice,
+        finalMessage,
+      )
+    );
+
+    bids.push({
+      agent_id: agent.id,
+      agent_name: agent.name,
+      proposed_store: store ? { id: store.id, name: store.name, rating: store.rating, review_count: store.review_count, image_url: store.image_url } : storeName,
+      proposed_price: proposedPrice,
+      delivery_fee: deliveryFee,
+      total_price: totalPrice,
+      message: finalMessage,
+      strategy: strategy.name,
+    });
+  }
+
+  if (batchStmts.length > 0) {
+    await c.env.DB.batch(batchStmts);
+  }
+
+  // bid ID를 DB에서 가져와서 응답에 포함
+  const insertedBids = await c.env.DB.prepare(
+    "SELECT id, agent_id FROM agent_bids WHERE order_id = ? ORDER BY id ASC"
+  ).bind(orderId).all();
+  const bidIdMap = new Map<number, number>();
+  for (const row of insertedBids.results) {
+    bidIdMap.set((row as Record<string, unknown>).agent_id as number, (row as Record<string, unknown>).id as number);
+  }
+  const bidsWithIds = bids.map(b => ({ ...b, id: bidIdMap.get(b.agent_id) }));
+
+  return c.json({
+    success: true,
+    order_id: orderId,
+    status: "agent_bidding",
+    bids: bidsWithIds,
+    matched_stores: matchedStores.length,
+  });
+});
+
+// 주문 상세 + 현재 상태
+app.get("/api/delivery/:id", async (c) => {
+  const id = c.req.param("id");
+
+  const order = await c.env.DB.prepare(
+    "SELECT * FROM delivery_orders WHERE id = ?"
+  ).bind(id).first() as DeliveryOrderRow | null;
+
+  if (!order) {
+    return c.json({ success: false, error: "Order not found" }, 404);
+  }
+
+  // 에이전트 입찰 목록
+  const agentBids = await c.env.DB.prepare(
+    `SELECT ab.*, a.name as agent_name, s.name as store_name, s.rating as store_rating, s.image_url as store_image
+     FROM agent_bids ab
+     LEFT JOIN agents a ON ab.agent_id = a.id
+     LEFT JOIN stores s ON ab.proposed_store_id = s.id
+     WHERE ab.order_id = ?
+     ORDER BY ab.created_at ASC`
+  ).bind(id).all();
+
+  // 기사 입찰 목록
+  const driverBids = await c.env.DB.prepare(
+    `SELECT db.*, d.name as driver_name, d.rating as driver_rating, d.vehicle_type
+     FROM driver_bids db
+     LEFT JOIN drivers d ON db.driver_id = d.id
+     WHERE db.order_id = ?
+     ORDER BY db.created_at ASC`
+  ).bind(id).all();
+
+  return c.json({
+    success: true,
+    data: {
+      order,
+      agent_bids: agentBids.results,
+      driver_bids: driverBids.results,
+    },
+  });
+});
+
+// 에이전트 선택 (소비자)
+app.post("/api/delivery/:id/select-agent", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  if (!body.agent_bid_id) {
+    return c.json({ success: false, error: "agent_bid_id is required" }, 400);
+  }
+
+  // 입찰 정보 조회
+  const bid = await c.env.DB.prepare(
+    "SELECT * FROM agent_bids WHERE id = ? AND order_id = ?"
+  ).bind(body.agent_bid_id, id).first();
+
+  if (!bid) {
+    return c.json({ success: false, error: "Bid not found" }, 404);
+  }
+
+  // 주문 상태 업데이트
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE delivery_orders SET status = 'driver_bidding', selected_agent_id = ?, store_id = ?, final_price = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind((bid as Record<string, unknown>).agent_id, (bid as Record<string, unknown>).proposed_store_id, (bid as Record<string, unknown>).total_price, id),
+  ]);
+
+  return c.json({ success: true, status: "driver_bidding" });
+});
+
+// 기사 수락 (기사가 에이전트 제시 배달비를 수락)
+app.post("/api/delivery/:id/driver-bid", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  if (!body.driver_id) {
+    return c.json({ success: false, error: "driver_id is required" }, 400);
+  }
+
+  // 주문 상태 확인
+  const order = await c.env.DB.prepare(
+    "SELECT status, selected_agent_id FROM delivery_orders WHERE id = ?"
+  ).bind(id).first() as Record<string, unknown> | null;
+
+  if (!order || order.status !== "driver_bidding") {
+    return c.json({ success: false, error: "Order is not accepting driver bids" }, 400);
+  }
+
+  // 선택된 에이전트 입찰에서 delivery_fee 조회
+  const agentBid = await c.env.DB.prepare(
+    "SELECT delivery_fee FROM agent_bids WHERE order_id = ? AND agent_id = ?"
+  ).bind(id, order.selected_agent_id).first() as Record<string, unknown> | null;
+
+  const deliveryFee = agentBid ? Number(agentBid.delivery_fee) : 0;
+
+  await c.env.DB.prepare(
+    `INSERT INTO driver_bids (order_id, driver_id, proposed_fee, estimated_time, message)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    id,
+    body.driver_id,
+    deliveryFee,
+    body.estimated_time || 30,
+    body.message || null,
+  ).run();
+
+  return c.json({ success: true });
+});
+
+// 기사 수락 (에이전트 또는 시스템)
+app.post("/api/delivery/:id/accept-driver", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  if (!body.driver_bid_id) {
+    return c.json({ success: false, error: "driver_bid_id is required" }, 400);
+  }
+
+  // 입찰 정보 조회
+  const bid = await c.env.DB.prepare(
+    "SELECT * FROM driver_bids WHERE id = ? AND order_id = ?"
+  ).bind(body.driver_bid_id, id).first();
+
+  if (!bid) {
+    return c.json({ success: false, error: "Driver bid not found" }, 404);
+  }
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE delivery_orders SET status = 'delivering', selected_driver_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind((bid as Record<string, unknown>).driver_id, id),
+    c.env.DB.prepare(
+      "UPDATE drivers SET status = 'delivering' WHERE id = ?"
+    ).bind((bid as Record<string, unknown>).driver_id),
+  ]);
+
+  return c.json({ success: true, status: "delivering" });
+});
+
+// 배달 완료
+app.post("/api/delivery/:id/complete", async (c) => {
+  const id = c.req.param("id");
+
+  const order = await c.env.DB.prepare(
+    "SELECT status, selected_driver_id FROM delivery_orders WHERE id = ?"
+  ).bind(id).first();
+
+  if (!order || (order as Record<string, unknown>).status !== "delivering") {
+    return c.json({ success: false, error: "Order is not in delivering status" }, 400);
+  }
+
+  const driverId = (order as Record<string, unknown>).selected_driver_id;
+
+  const stmts = [
+    c.env.DB.prepare(
+      "UPDATE delivery_orders SET status = 'delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).bind(id),
+  ];
+
+  if (driverId) {
+    stmts.push(
+      c.env.DB.prepare(
+        "UPDATE drivers SET status = 'available', total_deliveries = total_deliveries + 1 WHERE id = ?"
+      ).bind(driverId)
+    );
+  }
+
+  await c.env.DB.batch(stmts);
+
+  return c.json({ success: true, status: "delivered" });
+});
+
+// 리뷰 작성 (소비자)
+app.post("/api/delivery/:id/review", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+
+  const order = await c.env.DB.prepare(
+    "SELECT status, selected_agent_id, selected_driver_id FROM delivery_orders WHERE id = ?"
+  ).bind(id).first() as Record<string, unknown> | null;
+
+  if (!order || (order.status !== "delivered" && order.status !== "reviewed")) {
+    return c.json({ success: false, error: "Order must be delivered before review" }, 400);
+  }
+
+  // 리뷰 삽입
+  await c.env.DB.prepare(
+    `INSERT INTO delivery_reviews (order_id, agent_rating, driver_rating, food_rating, comment)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(
+    id,
+    body.agent_rating || null,
+    body.driver_rating || null,
+    body.food_rating || null,
+    body.comment || null,
+  ).run();
+
+  // 상태 업데이트 + 에이전트/기사 평점 업데이트
+  const stmts: D1PreparedStatement[] = [
+    c.env.DB.prepare(
+      "UPDATE delivery_orders SET status = 'reviewed', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).bind(id),
+  ];
+
+  if (body.agent_rating && order.selected_agent_id) {
+    stmts.push(
+      c.env.DB.prepare(
+        `UPDATE agents SET
+         rating = (SELECT AVG(agent_rating) FROM delivery_reviews dr
+                   JOIN delivery_orders do2 ON dr.order_id = do2.id
+                   WHERE do2.selected_agent_id = ? AND dr.agent_rating IS NOT NULL),
+         review_count = review_count + 1
+         WHERE id = ?`
+      ).bind(order.selected_agent_id, order.selected_agent_id)
+    );
+  }
+
+  if (body.driver_rating && order.selected_driver_id) {
+    stmts.push(
+      c.env.DB.prepare(
+        `UPDATE drivers SET
+         rating = (SELECT AVG(driver_rating) FROM delivery_reviews dr
+                   JOIN delivery_orders do2 ON dr.order_id = do2.id
+                   WHERE do2.selected_driver_id = ? AND dr.driver_rating IS NOT NULL),
+         review_count = review_count + 1
+         WHERE id = ?`
+      ).bind(order.selected_driver_id, order.selected_driver_id)
+    );
+  }
+
+  await c.env.DB.batch(stmts);
+
+  return c.json({ success: true, status: "reviewed" });
+});
+
+// ===== 기사 =====
+
+// 기사 등록
+app.post("/api/drivers/register", async (c) => {
+  const body = await c.req.json();
+
+  if (!body.name || typeof body.name !== "string" || body.name.trim().length < 2) {
+    return c.json({ success: false, error: "이름은 2자 이상이어야 합니다" }, 400);
+  }
+
+  const result = await c.env.DB.prepare(
+    "INSERT INTO drivers (name, phone, area, vehicle_type) VALUES (?, ?, ?, ?)"
+  ).bind(
+    body.name.trim(),
+    body.phone || null,
+    body.area || null,
+    body.vehicle_type || "motorcycle",
+  ).run();
+
+  return c.json({
+    success: true,
+    driver_id: result.meta.last_row_id,
+    message: "기사 등록이 완료되었습니다",
+  });
+});
+
+// 기사 대시보드 — 내 지역 배달 요청 보기
+app.get("/api/drivers/:id/jobs", async (c) => {
+  const driverId = c.req.param("id");
+  const status = c.req.query("status") || "driver_bidding";
+  const area = c.req.query("area") || "";
+
+  // 기사 정보 조회
+  const driver = await c.env.DB.prepare(
+    "SELECT * FROM drivers WHERE id = ?"
+  ).bind(driverId).first() as DriverRow | null;
+
+  if (!driver) {
+    return c.json({ success: false, error: "Driver not found" }, 404);
+  }
+
+  const driverArea = area || driver.area || "";
+
+  let sql = `SELECT do2.*, s.name as store_name, s.address as store_address, a.name as agent_name,
+                    ab.delivery_fee as offered_fee
+             FROM delivery_orders do2
+             LEFT JOIN stores s ON do2.store_id = s.id
+             LEFT JOIN agents a ON do2.selected_agent_id = a.id
+             LEFT JOIN agent_bids ab ON ab.order_id = do2.id AND ab.agent_id = do2.selected_agent_id
+             WHERE do2.status = ?`;
+  const params: string[] = [status];
+
+  if (driverArea) {
+    sql += " AND do2.area LIKE ?";
+    params.push(`%${driverArea}%`);
+  }
+
+  sql += " ORDER BY do2.created_at DESC LIMIT 20";
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// 기사 프로필
+app.get("/api/drivers/:id", async (c) => {
+  const id = c.req.param("id");
+  const driver = await c.env.DB.prepare(
+    "SELECT * FROM drivers WHERE id = ?"
+  ).bind(id).first();
+
+  if (!driver) {
+    return c.json({ success: false, error: "Driver not found" }, 404);
+  }
+
+  return c.json({ success: true, data: driver });
+});
+
+// 기사 목록 (특정 지역)
+app.get("/api/drivers", async (c) => {
+  const area = c.req.query("area") || "";
+  const status = c.req.query("status") || "";
+  const limit = Math.min(Math.max(1, Number(c.req.query("limit") || 20)), 100);
+
+  let sql = "SELECT id, name, area, vehicle_type, status, rating, review_count, total_deliveries, created_at FROM drivers WHERE 1=1";
+  const params: (string | number)[] = [];
+
+  if (area) {
+    sql += " AND area LIKE ?";
+    params.push(`%${area}%`);
+  }
+
+  if (status) {
+    sql += " AND status = ?";
+    params.push(status);
+  }
+
+  sql += " ORDER BY rating DESC, total_deliveries DESC LIMIT ?";
+  params.push(limit);
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ===== 에이전트 대시보드 =====
+
+// 에이전트의 입찰 내역
+app.get("/api/agents/:id/bids", async (c) => {
+  const agentId = c.req.param("id");
+  const limit = Math.min(Math.max(1, Number(c.req.query("limit") || 30)), 100);
+
+  const result = await c.env.DB.prepare(
+    `SELECT ab.*, do2.consumer_request, do2.area, do2.food_type, do2.quantity, do2.status as order_status,
+            do2.selected_agent_id
+     FROM agent_bids ab
+     JOIN delivery_orders do2 ON ab.order_id = do2.id
+     WHERE ab.agent_id = ?
+     ORDER BY ab.created_at DESC LIMIT ?`
+  ).bind(agentId, limit).all();
+
+  const bids = (result.results as unknown as (Record<string, unknown>)[]).map(row => ({
+    ...row,
+    is_selected: Number(row.selected_agent_id) === Number(agentId),
+  }));
+
+  return c.json({ success: true, data: bids });
+});
+
 // 헬스체크
 app.get("/health", (c) => {
-  return c.json({ status: "ok", version: "0.3.0" });
+  return c.json({ status: "ok", version: "0.4.0" });
 });
 
 export default app;

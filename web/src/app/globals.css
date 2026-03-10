@@ -1462,3 +1462,850 @@ a {
     flex-direction: column;
   }
 }
+
+/* ===== 기사 페이지 ===== */
+.driver-page {
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.driver-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.driver-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.driver-logo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+.driver-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: #34a853;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 1px;
+}
+
+.driver-profile-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.driver-status-dot {
+  width: 8px;
+  height: 8px;
+  background: #34a853;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.driver-area-tag {
+  font-size: 12px;
+  color: #1a73e8;
+  background: #e8f0fe;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+/* Tabs */
+.driver-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 20px;
+}
+
+.driver-tab {
+  flex: 1;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #5f6368;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.driver-tab:hover { color: #202124; }
+
+.driver-tab.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+}
+
+.driver-content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Registration */
+.driver-register {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.register-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  width: 100%;
+  max-width: 480px;
+}
+
+.register-card h2 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.register-card p {
+  color: #5f6368;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #202124;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid #dfe1e5;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+}
+
+.vehicle-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.vehicle-btn {
+  padding: 10px;
+  font-size: 13px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vehicle-btn:hover { border-color: #1a73e8; }
+
+.vehicle-btn.active {
+  border-color: #1a73e8;
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.register-submit {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.2s;
+}
+
+.register-submit:hover { background: #1765cc; }
+.register-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Jobs */
+.jobs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.jobs-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.refresh-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #1a73e8;
+  background: #e8f0fe;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.refresh-btn:hover { background: #d2e3fc; }
+
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.job-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 14px;
+  padding: 18px;
+  transition: box-shadow 0.2s;
+}
+
+.job-card:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.job-card.active-delivery {
+  border-color: #34a853;
+  border-width: 2px;
+}
+
+.job-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.job-request {
+  font-size: 16px;
+  font-weight: 600;
+  color: #202124;
+  margin-bottom: 8px;
+}
+
+.job-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.job-area, .job-food, .job-budget, .job-qty {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.job-area { background: #e8f0fe; color: #1a73e8; }
+.job-food { background: #fce8e6; color: #ea4335; }
+.job-budget { background: #e6f4ea; color: #34a853; }
+.job-qty { background: #fef7e0; color: #f9ab00; }
+
+.job-time {
+  font-size: 12px;
+  color: #9aa0a6;
+  flex-shrink: 0;
+}
+
+.job-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.bid-count {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.bid-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bid-btn:hover { background: #1765cc; }
+
+/* Bid form */
+.bid-form {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 4px;
+}
+
+.bid-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.bid-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bid-submit {
+  flex: 1;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #34a853;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.bid-submit:hover { background: #2d9249; }
+
+.bid-cancel {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #5f6368;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.complete-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #34a853;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.complete-btn:hover { background: #2d9249; }
+
+/* Empty state */
+.empty-jobs {
+  text-align: center;
+  padding: 60px 20px;
+  color: #70757a;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-jobs p {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.empty-sub {
+  font-size: 13px;
+  color: #9aa0a6;
+}
+
+/* Driver stats */
+.driver-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.stat-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-num {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #202124;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #5f6368;
+  margin-top: 4px;
+}
+
+/* My deliveries */
+.driver-my-deliveries h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 480px) {
+  .bid-form-row { grid-template-columns: 1fr; }
+  .driver-stats { grid-template-columns: 1fr; }
+  .vehicle-options { grid-template-columns: 1fr; }
+}
+
+/* ===== 배달 주문 페이지 ===== */
+.delivery-page {
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.delivery-content {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+.delivery-input-section h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.delivery-input-section > p {
+  color: #5f6368;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.delivery-form {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.delivery-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.delivery-submit {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #ea4335;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 16px;
+  transition: background 0.2s;
+}
+
+.delivery-submit:hover { background: #d93025; }
+.delivery-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.delivery-examples {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.delivery-examples > p {
+  font-size: 13px;
+  color: #9aa0a6;
+  margin-bottom: 10px;
+}
+
+/* Order summary bar */
+.order-summary-bar {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.order-summary-text {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.order-summary-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Agent bids */
+.delivery-agents-section h3,
+.delivery-drivers-section h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: #5f6368;
+  margin-bottom: 16px;
+}
+
+.agent-bid-list, .driver-bid-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-bid-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 14px;
+  padding: 18px;
+  transition: box-shadow 0.2s;
+}
+
+.agent-bid-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+.agent-bid-card.best-bid {
+  border: 2px solid #1a73e8;
+  background: linear-gradient(135deg, #f0f7ff, #fff);
+}
+
+.agent-bid-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.agent-bid-avatar {
+  width: 44px;
+  height: 44px;
+  background: #f1f3f4;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.agent-bid-info { flex: 1; }
+
+.agent-bid-name {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-bid-store {
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.agent-bid-price { text-align: right; }
+
+.bid-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ea4335;
+}
+
+.bid-breakdown {
+  font-size: 12px;
+  color: #9aa0a6;
+}
+
+.agent-bid-message {
+  font-size: 14px;
+  color: #202124;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  background: #f8f9fa;
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+
+.select-agent-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.select-agent-btn:hover { background: #1765cc; }
+.select-agent-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Driver bids */
+.driver-bid-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.driver-bid-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.driver-bid-icon {
+  font-size: 28px;
+}
+
+.driver-bid-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.driver-bid-meta {
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.driver-bid-message {
+  font-size: 14px;
+  color: #202124;
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+/* Delivering animation */
+.delivering-section {
+  text-align: center;
+  padding: 60px 0;
+}
+
+.delivering-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.delivering-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  animation: ride 2s ease-in-out infinite;
+}
+
+@keyframes ride {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(20px); }
+}
+
+.delivering-card h2 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.delivering-card p {
+  color: #5f6368;
+  margin-bottom: 16px;
+}
+
+.delivering-progress {
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 60%;
+  background: linear-gradient(90deg, #34a853, #1a73e8);
+  border-radius: 3px;
+  animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0% { width: 20%; }
+  50% { width: 80%; }
+  100% { width: 20%; }
+}
+
+.delivering-sub {
+  font-size: 13px;
+  color: #9aa0a6;
+}
+
+/* Review */
+.review-section {
+  padding: 40px 0;
+}
+
+.review-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.review-card h2 {
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+}
+
+.review-card > p {
+  color: #5f6368;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.rating-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.rating-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rating-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.star-btn {
+  font-size: 24px;
+  color: #e0e0e0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  transition: transform 0.1s;
+}
+
+.star-btn:hover { transform: scale(1.2); }
+.star-btn.active { color: #fbbc05; }
+
+@media (max-width: 480px) {
+  .delivery-form-grid { grid-template-columns: 1fr; }
+  .agent-bid-header { flex-direction: column; align-items: flex-start; }
+  .agent-bid-price { text-align: left; }
+}
+
+/* ===== 에이전트 대시보드 ===== */
+.agent-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.agent-select-btn:hover {
+  border-color: #4285f4;
+  background: #f0f6ff;
+}
+
+.agent-bid-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.agent-bid-price-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.agent-bid-price-label {
+  color: #5f6368;
+}
+
+.agent-bid-price-value {
+  color: #202124;
+  font-weight: 500;
+}
