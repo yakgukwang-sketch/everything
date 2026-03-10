@@ -202,7 +202,7 @@
 **좋은 점:**
 - 비전/전략 문서 충실 (README.md, AGENT_STRATEGY.md)
 - 프로젝트 구조 개요 명확 (OVERVIEW.md)
-- 크롤링 가이드 실용적 (API_KEYS_GUIDE.md)
+- 크롤링 & 데이터 수집 가이드 실용적 (API_KEYS_GUIDE.md)
 - 에이전트 분류 체계 정리 (agents/README.md)
 
 **감점 (-3):**
