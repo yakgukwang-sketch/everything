@@ -391,13 +391,8 @@ export default function Home() {
       {phase === "idle" ? (
         /* 초기 상태 */
         <div className="hero">
-          <h1 className="logo">
-            <span className="e1">e</span><span className="v">v</span><span>e</span>
-            <span className="r">r</span><span className="y">y</span><span>t</span>
-            <span className="e2">h</span><span>i</span><span className="v">n</span>
-            <span className="e1">g</span>
-          </h1>
-          <p className="tagline">AI 에이전트에게 물어보세요</p>
+          <h1 className="logo">everything</h1>
+          <p className="tagline">당신을 위한 세일즈맨</p>
 
           <form className="search-form" onSubmit={handleSubmit}>
             <div className="search-wrapper">
