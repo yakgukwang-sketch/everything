@@ -20,7 +20,7 @@ export default function Home() {
   const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [phase, setPhase] = useState<
-    "idle" | "chatting" | "confirm" | "agents" |
+    "idle" | "chatting" | "agents" |
     "delivery_bids" | "delivery_drivers" | "delivering" | "delivery_review"
   >("idle");
   const [pendingQuery, setPendingQuery] = useState<{ query: string; parsed: { product?: string; specs?: Record<string, string>; budget?: string; keywords?: string[] } | null } | null>(null);
@@ -112,8 +112,10 @@ export default function Home() {
             const specs = data.query.specs ? Object.values(data.query.specs).join(" ") : "";
             const budget = data.query.budget || "";
             const finalQuery = `${product} ${specs} ${budget} ${keywords.join(" ")}`.trim();
-            setPendingQuery({ query: finalQuery, parsed: data.query });
-            setPhase("confirm");
+            // confirm 없이 바로 에이전트에게 전달
+            setPhase("agents");
+            setChatMsgs(prev => [...prev, { role: "system", text: "좋아요! 에이전트들에게 물어볼게요." }]);
+            sendToAgents(finalQuery);
           }
         }
       }
@@ -306,7 +308,7 @@ export default function Home() {
     const newMsgs = [...chatMsgs, { role: "user" as const, text }];
     setChatMsgs(newMsgs);
 
-    if (phase === "idle" || phase === "agents" || phase === "confirm" || phase === "delivery_review") {
+    if (phase === "idle" || phase === "agents" || phase === "delivery_review") {
       setPhase("chatting");
       setAgentResponses([]);
       setDeliveryBids([]);
@@ -322,25 +324,15 @@ export default function Home() {
     if (chatMsgs.length === 0) return;
     const userMsgs = chatMsgs.filter(m => m.role === "user").map(m => m.text);
     const query = userMsgs.join(" ");
-    setPendingQuery({ query, parsed: null });
-    setPhase("confirm");
-    setChatMsgs(prev => [...prev, { role: "system", text: "이 정도면 충분할까요?" }]);
-  };
-
-  // 확인 후 — 배달 vs 쇼핑 자동 감지
-  const handleConfirmSend = () => {
-    if (!pendingQuery) return;
-    const isDelivery = detectDelivery(pendingQuery.query);
-
+    const isDelivery = detectDelivery(query);
     if (isDelivery) {
       setChatMsgs(prev => [...prev, { role: "system", text: "배달 주문이네요! 에이전트들이 최적의 가게를 찾고 있어요..." }]);
-      sendDeliveryRequest(pendingQuery.query);
+      sendDeliveryRequest(query);
     } else {
       setPhase("agents");
       setChatMsgs(prev => [...prev, { role: "system", text: "좋아요! 에이전트들에게 물어볼게요." }]);
-      sendToAgents(pendingQuery.query);
+      sendToAgents(query);
     }
-    setPendingQuery(null);
   };
 
   // 선택지 클릭
@@ -348,18 +340,7 @@ export default function Home() {
     if (chatLoading) return;
     const newMsgs = [...chatMsgs, { role: "user" as const, text: option }];
     setChatMsgs(newMsgs);
-    if (phase === "confirm") {
-      setPhase("chatting");
-      setPendingQuery(null);
-    }
     sendChat(newMsgs);
-  };
-
-  // 더 대화하기
-  const handleContinueChat = () => {
-    setPhase("chatting");
-    setPendingQuery(null);
-    setChatMsgs(prev => [...prev, { role: "system", text: "좋아요, 더 알려줘!" }]);
   };
 
   // 새 대화
@@ -493,66 +474,12 @@ export default function Home() {
               </div>
             )}
 
-            {/* 확인 단계 */}
-            {phase === "confirm" && pendingQuery && (
-              <div className="confirm-section">
-                <div className="confirm-card">
-                  <div className="confirm-title">이 정도면 충분할까요?</div>
-                  <div className="confirm-summary">
-                    {pendingQuery.parsed ? (
-                      <div className="confirm-details">
-                        {pendingQuery.parsed.product && (
-                          <div className="confirm-item">
-                            <span className="confirm-label">상품</span>
-                            <span>{pendingQuery.parsed.product}</span>
-                          </div>
-                        )}
-                        {pendingQuery.parsed.specs && Object.keys(pendingQuery.parsed.specs).length > 0 && (
-                          <div className="confirm-item">
-                            <span className="confirm-label">조건</span>
-                            <span>{Object.entries(pendingQuery.parsed.specs).map(([k, v]) => `${k}: ${v}`).join(", ")}</span>
-                          </div>
-                        )}
-                        {pendingQuery.parsed.budget && (
-                          <div className="confirm-item">
-                            <span className="confirm-label">예산</span>
-                            <span>{pendingQuery.parsed.budget}</span>
-                          </div>
-                        )}
-                        {pendingQuery.parsed.keywords && pendingQuery.parsed.keywords.length > 0 && (
-                          <div className="confirm-item">
-                            <span className="confirm-label">검색어</span>
-                            <span>{pendingQuery.parsed.keywords.join(", ")}</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="confirm-details">
-                        <div className="confirm-item">
-                          <span className="confirm-label">검색어</span>
-                          <span>{pendingQuery.query}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="confirm-buttons">
-                    <button className="confirm-btn-yes" onClick={handleConfirmSend}>
-                      네, 에이전트에게 맡기기
-                    </button>
-                    <button className="confirm-btn-no" onClick={handleContinueChat}>
-                      아니요, 더 말할게 있어요
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* 에이전트 로딩 (쇼핑) */}
             {agentLoading && (
               <div className="chat-msg system">
                 <div className="chat-bot-icon">E</div>
                 <div className="chat-bubble system">
-                  <p>12개 에이전트가 경쟁 중...</p>
+                  <p>에이전트들이 경쟁 중...</p>
                   <div className="loading" style={{ padding: "10px 0" }}>
                     <div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" />
                   </div>
@@ -649,7 +576,6 @@ export default function Home() {
                 placeholder={
                   phase === "delivery_bids" ? "에이전트를 선택하거나 추가 질문..." :
                   phase === "delivery_drivers" ? "기사를 선택하거나 추가 질문..." :
-                  phase === "confirm" ? "더 추가할 내용을 입력하세요..." :
                   phase === "agents" ? "추가 질문이 있으면 입력하세요..." :
                   "답변을 입력하세요..."
                 }

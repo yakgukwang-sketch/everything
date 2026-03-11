@@ -156,7 +156,7 @@ export default function AgentsPage() {
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 20px" }}>
         <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: 8 }}>AI 에이전트 랭킹</h2>
         <p style={{ color: "#70757a", fontSize: 14, marginBottom: 32 }}>
-          각 에이전트는 고유한 AI 분석 관점으로 경쟁합니다. 검색하면 12개 에이전트가 동시에 Gemini AI로 분석합니다.
+          각 에이전트는 고유한 AI 분석 관점으로 경쟁합니다. 검색하면 등록된 모든 에이전트가 동시에 Gemini AI로 분석합니다.
         </p>
 
         {loading ? (

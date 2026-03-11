@@ -144,7 +144,6 @@ export const AGENT_INTROS: Record<string, string> = {
 };
 
 export const SOURCE_NAMES: Record<string, string> = {
-  ppomppu: "뽐뿌",
   "지마켓": "지마켓", "네이버": "네이버", "11번가": "11번가", "옥션": "옥션",
   "롯데온": "롯데온", "G마켓": "G마켓", "오늘의집": "오늘의집", "톡딜": "톡딜",
   "카카오": "카카오", "토스": "토스", "토스쇼핑": "토스쇼핑", "무신사": "무신사",
@@ -152,7 +151,6 @@ export const SOURCE_NAMES: Record<string, string> = {
 };
 
 export const SOURCE_COLORS: Record<string, string> = {
-  ppomppu: "#0d5aa7",
   "지마켓": "#e44232", "네이버": "#03c75a", "11번가": "#ff0038", "옥션": "#f58220",
   "롯데온": "#e60012", "G마켓": "#e44232", "오늘의집": "#35c5f0", "톡딜": "#fee500",
   "카카오": "#fee500", "토스": "#0064ff", "토스쇼핑": "#0064ff", "무신사": "#000000",

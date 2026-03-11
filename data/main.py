@@ -1,10 +1,10 @@
 """전체 크롤링 실행"""
 
 from crawlers.base import upload_deals
-from crawlers.ppomppu import crawl_hotdeal as crawl_ppomppu
+from crawlers.coupang import crawl_coupang
 
 CRAWLERS = [
-    ("뽐뿌", crawl_ppomppu),
+    ("쿠팡", crawl_coupang),
 ]
 
 
