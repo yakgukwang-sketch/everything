@@ -64,8 +64,8 @@ def search_kakao_place(query: str, x: str = "", y: str = "", radius: int = 5000)
                     if not name:
                         continue
 
-                    lng = float(doc.get("x", "0"))
-                    lat = float(doc.get("y", "0"))
+                    lng = float(doc.get("x") or "0")
+                    lat = float(doc.get("y") or "0")
 
                     stores.append(Store(
                         name=name,

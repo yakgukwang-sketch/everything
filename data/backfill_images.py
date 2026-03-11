@@ -1,5 +1,6 @@
 """이미지 없는 딜에 og:image 추출하여 백필"""
 
+import os
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -8,9 +9,15 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 API_URL = "https://everything-api.deri58.workers.dev"
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+}
+
+API_HEADERS = {
+    "Authorization": f"Bearer {ADMIN_API_KEY}",
+    "Content-Type": "application/json",
 }
 
 
@@ -68,6 +75,7 @@ def update_image(deal_id: int, image_url: str) -> bool:
         resp = requests.patch(
             f"{API_URL}/api/backfill/{deal_id}/image",
             json={"image_url": image_url},
+            headers=API_HEADERS,
             timeout=10,
         )
         return resp.status_code == 200
@@ -79,7 +87,8 @@ def main():
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 50
     print(f"이미지 없는 딜 {limit}개 조회 중...")
 
-    resp = requests.get(f"{API_URL}/api/backfill/no-image?limit={limit}", timeout=10)
+    resp = requests.get(f"{API_URL}/api/backfill/no-image?limit={limit}", headers=API_HEADERS, timeout=10)
+    resp.raise_for_status()
     deals = resp.json().get("data", [])
     print(f"{len(deals)}개 발견\n")
 

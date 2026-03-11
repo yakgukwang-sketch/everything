@@ -65,7 +65,7 @@ def merge_stores(naver: Store, kakao: Store) -> Store:
     좌표: 카카오 우선 (WGS84 직접 제공)
     나머지: 비어있지 않은 값 우선
     """
-    return Store(
+    merged = Store(
         name=naver.name,
         address=naver.address or kakao.address,
         road_address=naver.road_address or kakao.road_address,
@@ -79,6 +79,8 @@ def merge_stores(naver: Store, kakao: Store) -> Store:
         menu_info=naver.menu_info or kakao.menu_info,
         image_url=naver.image_url or kakao.image_url,
     )
+    merged.verified = True
+    return merged
 
 
 def validate_stores(naver_stores: list[Store], kakao_stores: list[Store]) -> list[Store]:

@@ -68,7 +68,7 @@ export default function DeliveryPage() {
           agent_id: b.agent_id,
           agent_name: b.agent_name,
           proposed_store_id: b.proposed_store_id,
-          store_name: (b.proposed_store as Record<string, unknown>)?.name || b.store_name || "추천 가게",
+          store_name: (typeof b.proposed_store === "object" && b.proposed_store !== null ? (b.proposed_store as Record<string, unknown>).name : b.proposed_store) || b.store_name || "추천 가게",
           proposed_price: b.proposed_price,
           delivery_fee: b.delivery_fee,
           total_price: b.total_price,
@@ -166,12 +166,16 @@ export default function DeliveryPage() {
       const res = await fetch(`${API_URL}/api/delivery/${orderId}`);
       const data = await res.json();
       if (data.success) {
-        setOrder(prev => ({
-          ...prev!,
-          ...data.data,
-          agent_bids: data.agent_bids || prev?.agent_bids || [],
-          driver_bids: data.driver_bids || prev?.driver_bids || [],
-        }));
+        const orderData = data.data || {};
+        setOrder(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...(orderData.order || {}),
+            agent_bids: orderData.agent_bids || prev.agent_bids || [],
+            driver_bids: orderData.driver_bids || prev.driver_bids || [],
+          };
+        });
       }
     } catch (err) {
       console.error(err);
@@ -382,7 +386,21 @@ export default function DeliveryPage() {
                 </div>
               </div>
               <p className="delivering-sub">기사님이 배달 중입니다. 잠시만 기다려주세요.</p>
-              <button className="delivery-submit" onClick={() => setPhase("review")} style={{ marginTop: 24 }}>
+              <button className="delivery-submit" onClick={async () => {
+                try {
+                  const res = await fetch(`${API_URL}/api/delivery/${order.id}/complete`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    setOrder(prev => prev ? { ...prev, status: "delivered" } : null);
+                    setPhase("review");
+                  }
+                } catch (err) {
+                  console.error(err);
+                }
+              }} style={{ marginTop: 24 }}>
                 배달 받았어요 — 평가하기
               </button>
             </div>

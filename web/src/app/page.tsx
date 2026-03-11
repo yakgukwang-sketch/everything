@@ -4,63 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   API_URL, Deal, AgentResponse, ChatMessage, AgentBid, DriverBid,
-  AGENT_ICONS, AGENT_INTROS, SOURCE_NAMES, SOURCE_COLORS, DELIVERY_STATUS,
-  formatPrice, timeAgo, sanitizeUrl,
+  AGENT_ICONS, AGENT_INTROS,
+  formatPrice, sanitizeUrl,
 } from "@/lib/shared";
-
-// 배달 관련 키워드로 자동 감지
-const DELIVERY_KEYWORDS = [
-  "시켜", "배달", "주문", "인분", "그릇", "마리", "판",
-  "치킨", "피자", "족발", "보쌈", "떡볶이", "짜장", "짬뽕", "탕수육",
-  "제육", "삼겹살", "곱창", "냉면", "김밥", "돈까스", "초밥", "회",
-  "햄버거", "분식", "중식", "한식", "일식", "양식",
-  "먹고", "먹을", "배고", "야식", "점심", "저녁", "아침",
-];
-
-const AREA_KEYWORDS = [
-  "부천", "인천", "서울", "수원", "성남", "안양", "고양", "용인",
-  "화성", "시흥", "광명", "의정부", "파주", "김포", "구로", "강남",
-  "마포", "송파", "관악", "영등포", "동대문", "종로",
-];
-
-function detectDelivery(query: string, parsed: Record<string, unknown> | null): boolean {
-  const text = query.toLowerCase();
-  return DELIVERY_KEYWORDS.some(kw => text.includes(kw));
-}
-
-function extractArea(query: string): string {
-  for (const area of AREA_KEYWORDS) {
-    if (query.includes(area)) return area;
-  }
-  return "부천";
-}
-
-function extractFoodType(query: string): string {
-  const foods = [
-    "제육볶음", "치킨", "피자", "족발", "보쌈", "떡볶이", "짜장면", "짬뽕",
-    "탕수육", "삼겹살", "곱창", "냉면", "김밥", "돈까스", "초밥", "회",
-    "햄버거", "분식", "라멘", "파스타", "샐러드", "커피",
-  ];
-  for (const food of foods) {
-    if (query.includes(food)) return food;
-  }
-  // 키워드 없으면 첫 명사 추출
-  const words = query.split(/\s+/).filter(w => w.length >= 2);
-  return words[1] || words[0] || "음식";
-}
-
-function extractBudget(query: string): number {
-  const match = query.match(/(\d+)\s*만\s*원/) || query.match(/(\d{4,})\s*원/);
-  if (match) {
-    return match[0].includes("만") ? parseInt(match[1]) * 10000 : parseInt(match[1]);
-  }
-  return 50000;
-}
-
-function extractQuantity(query: string): string {
-  const match = query.match(/(\d+)\s*(인분|그릇|마리|판|개|잔)/);
-  return match ? match[0] : "1인분";
-}
+import { detectDelivery, extractArea, extractFoodType, extractBudget, extractQuantity } from "@/lib/delivery-utils";
+import DealFeed from "@/components/DealFeed";
+import DeliveryFlow from "@/components/DeliveryFlow";
 
 type DeliveryBid = AgentBid & { agent_name?: string; store_name?: string };
 
@@ -187,7 +136,7 @@ export default function Home() {
       });
       const data = await res.json();
       const sorted = (data.responses || []).sort(
-        (a: AgentResponse, b: AgentResponse) => (b.response.confidence || 0) - (a.response.confidence || 0)
+        (a: AgentResponse, b: AgentResponse) => (b.rating || 0) - (a.rating || 0)
       );
       setAgentResponses(sorted);
     } catch (err) { console.error(err); }
@@ -222,15 +171,20 @@ export default function Home() {
           order_id: data.order_id,
           agent_id: b.agent_id,
           agent_name: b.agent_name,
-          store_name: typeof b.proposed_store === "string" ? b.proposed_store : (b.proposed_store as Record<string, unknown>)?.name || b.store_name || "추천 가게",
+          store_name: typeof b.proposed_store === "string" ? b.proposed_store : (b.proposed_store != null && typeof b.proposed_store === "object") ? (b.proposed_store as Record<string, unknown>)?.name || b.store_name || "추천 가게" : b.store_name || "추천 가게",
           proposed_price: b.proposed_price,
           delivery_fee: b.delivery_fee,
           total_price: b.total_price,
           message: b.message,
           created_at: new Date().toISOString(),
         }));
-        setDeliveryBids(bids);
-        setPhase("delivery_bids");
+        if (bids.length === 0) {
+          setChatMsgs(prev => [...prev, { role: "system", text: data.message || "해당 지역에 등록된 가게가 없어요. 다른 지역이나 음식으로 다시 시도해보세요!" }]);
+          setPhase("chatting");
+        } else {
+          setDeliveryBids(bids);
+          setPhase("delivery_bids");
+        }
       }
     } catch (err) {
       console.error(err);
@@ -246,8 +200,7 @@ export default function Home() {
     if (agentSelectingRef.current) return; // ref 기반 중복 클릭 방지
     agentSelectingRef.current = true;
     setDeliveryLoading(true);
-    setPhase("delivery_drivers");
-    setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택했어요! 기사님을 찾고 있어요..." }]);
+    setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택하는 중..." }]);
     try {
       const res = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/select-agent`, {
         method: "POST",
@@ -261,11 +214,16 @@ export default function Home() {
         const orderData = await orderRes.json();
         setDriverBids(orderData.data?.driver_bids || []);
         setPhase("delivery_drivers");
+        setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택했어요! 기사님을 찾고 있어요..." }]);
+      } else {
+        setChatMsgs(prev => [...prev, { role: "system", text: data.error || "에이전트 선택에 실패했어요. 다시 시도해주세요." }]);
       }
     } catch (err) {
       console.error(err);
+      setChatMsgs(prev => [...prev, { role: "system", text: "네트워크 오류가 발생했어요. 다시 시도해주세요." }]);
     } finally {
       setDeliveryLoading(false);
+      agentSelectingRef.current = false;
     }
   };
 
@@ -295,11 +253,16 @@ export default function Home() {
   const handleDeliveryReview = async () => {
     if (!deliveryOrderId) return;
     try {
-      await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/complete`, {
+      const completeRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/review`, {
+      const completeData = await completeRes.json();
+      if (!completeData.success) {
+        setChatMsgs(prev => [...prev, { role: "system", text: "배달 완료 처리에 실패했어요. 다시 시도해주세요." }]);
+        return;
+      }
+      const reviewRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -309,7 +272,12 @@ export default function Home() {
           comment: reviewComment,
         }),
       });
-      setChatMsgs(prev => [...prev, { role: "system", text: "평가 완료! 감사합니다 😊" }]);
+      const reviewData = await reviewRes.json();
+      if (reviewData.success) {
+        setChatMsgs(prev => [...prev, { role: "system", text: "평가 완료! 감사합니다" }]);
+      } else {
+        setChatMsgs(prev => [...prev, { role: "system", text: "배달은 완료됐지만 평가 저장에 실패했어요." }]);
+      }
       setPhase("delivery_review");
     } catch (err) {
       console.error(err);
@@ -362,7 +330,7 @@ export default function Home() {
   // 확인 후 — 배달 vs 쇼핑 자동 감지
   const handleConfirmSend = () => {
     if (!pendingQuery) return;
-    const isDelivery = detectDelivery(pendingQuery.query, pendingQuery.parsed as Record<string, unknown> | null);
+    const isDelivery = detectDelivery(pendingQuery.query);
 
     if (isDelivery) {
       setChatMsgs(prev => [...prev, { role: "system", text: "배달 주문이네요! 에이전트들이 최적의 가게를 찾고 있어요..." }]);
@@ -411,17 +379,6 @@ export default function Home() {
     setFoodRating(5);
     setReviewComment("");
   };
-
-  const StarSelector = ({ value, onChange }: { value: number; onChange: (v: number) => void }) => (
-    <div style={{ display: "flex", gap: 2 }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <button key={i} type="button" onClick={() => onChange(i)}
-          style={{ fontSize: 20, color: i <= value ? "#fbbc05" : "#e0e0e0", background: "none", border: "none", cursor: "pointer", padding: 1 }}>
-          {i <= value ? "★" : "☆"}
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <div className="main">
@@ -478,75 +435,14 @@ export default function Home() {
           </div>
 
           {/* 딜 피드 */}
-          <div className="feed">
-            <div className="feed-header">
-              <div className="feed-tabs">
-                <button className={`feed-tab ${feedTab === "hot" ? "active" : ""}`} onClick={() => setFeedTab("hot")}>HOT</button>
-                <button className={`feed-tab ${feedTab === "latest" ? "active" : ""}`} onClick={() => setFeedTab("latest")}>최신</button>
-              </div>
-              <div className="feed-filters">
-                {["all", ...Array.from(new Set(deals.map(d => d.source)))].map(s => (
-                  <button key={s} className={`filter-btn ${feedFilter === s ? "active" : ""}`} onClick={() => setFeedFilter(s)}>
-                    {s === "all" ? "전체" : s.startsWith("biz:") ? s.replace("biz:", "") : SOURCE_NAMES[s] || s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {feedLoading ? (
-              <div className="loading">
-                <div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" />
-              </div>
-            ) : (
-              <div className="deal-grid">
-                {(feedFilter === "all" ? deals : deals.filter(d => d.source === feedFilter)).map((deal) => (
-                  <a key={deal.id} href={sanitizeUrl(deal.url)} target="_blank" rel="noopener noreferrer" className={`deal-card ${deal.hotScore && deal.hotScore > 30 ? "deal-hot" : ""}`}>
-                    {deal.hotScore && deal.hotScore > 30 && (
-                      <div className="hot-score-bar">
-                        <span className="hot-fire">🔥 HOT</span>
-                        {deal.recommendations && deal.recommendations > 0 && (
-                          <span className="hot-recs">추천 {deal.recommendations}</span>
-                        )}
-                      </div>
-                    )}
-                    <div className="deal-image">
-                      {deal.image_url ? (
-                        <img src={deal.image_url} alt={deal.title} loading="lazy" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <div className="deal-image-placeholder">
-                          <span>{SOURCE_NAMES[deal.source] || deal.source}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="deal-body">
-                      <div className="deal-source">
-                        <span className="deal-source-badge" style={{ background: deal.source.startsWith("biz:") ? "#6c5ce7" : (SOURCE_COLORS[deal.source] || "#5f6368") }}>
-                          {deal.source.startsWith("biz:") ? deal.source.replace("biz:", "") : (SOURCE_NAMES[deal.source] || deal.source)}
-                        </span>
-                        <span className="deal-time">{timeAgo(deal.posted_at)}</span>
-                      </div>
-                      <div className="deal-title">{deal.title}</div>
-                      <div className="deal-price-row">
-                        {deal.discount_rate > 0 && (
-                          <span className="deal-discount">{deal.discount_rate}%</span>
-                        )}
-                        {deal.sale_price > 0 && (
-                          <span className="deal-sale-price">{formatPrice(deal.sale_price)}</span>
-                        )}
-                      </div>
-                      {deal.original_price > 0 && deal.original_price !== deal.sale_price && (
-                        <span className="deal-original-price">{formatPrice(deal.original_price)}</span>
-                      )}
-                    </div>
-                  </a>
-                ))}
-              </div>
-            )}
-
-            {!feedLoading && deals.length === 0 && (
-              <div className="empty-feed">아직 수집된 딜이 없습니다.</div>
-            )}
-          </div>
+          <DealFeed
+            deals={deals}
+            feedTab={feedTab}
+            feedFilter={feedFilter}
+            feedLoading={feedLoading}
+            onTabChange={setFeedTab}
+            onFilterChange={setFeedFilter}
+          />
         </div>
       ) : (
         /* 대화 모드 */
@@ -689,7 +585,7 @@ export default function Home() {
                             {i === 0 && <span className="best-badge">BEST</span>}
                           </div>
                           <div className="agent-response-meta">
-                            신뢰도 {Math.round((r.response.confidence || 0) * 100)}% · 수수료 {r.commission_rate}%
+                            ★ {(r.rating || 0).toFixed(1)} · 수수료 {r.commission_rate}%
                           </div>
                         </div>
                       </div>
@@ -721,126 +617,27 @@ export default function Home() {
               </div>
             )}
 
-            {/* ===== 배달 플로우 (채팅 안에서 전부 진행) ===== */}
-
-            {/* 배달 에이전트 입찰 */}
-            {phase === "delivery_bids" && deliveryBids.length > 0 && (
-              <div className="agent-results-chat">
-                <div className="chat-msg system">
-                  <div className="chat-bot-icon">E</div>
-                  <div className="chat-bubble system">
-                    <p>에이전트 {deliveryBids.length}명이 조건을 제시했어요! 마음에 드는 걸 선택하세요.</p>
-                  </div>
-                </div>
-                <div className="agent-response-grid">
-                  {deliveryBids.sort((a, b) => (a.total_price || 0) - (b.total_price || 0)).slice(0, 6).map((bid, i) => (
-                    <div key={bid.id} className={`agent-response-card ${i === 0 ? "agent-best" : ""}`} style={{ cursor: "pointer" }}
-                      onClick={() => handleSelectDeliveryAgent(bid.id)}>
-                      <div className="agent-response-header">
-                        <div className="agent-avatar">{AGENT_ICONS[bid.agent_name || ""] || "🤖"}</div>
-                        <div className="agent-response-info">
-                          <div className="agent-response-name">
-                            {bid.agent_name || `에이전트 ${bid.agent_id}`}
-                            {i === 0 && <span className="best-badge">BEST</span>}
-                          </div>
-                          <div className="agent-response-meta">
-                            {bid.store_name || "추천 가게"}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", flexShrink: 0 }}>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: "#ea4335" }}>{formatPrice(bid.total_price)}</div>
-                          <div style={{ fontSize: 11, color: "#9aa0a6" }}>음식 {formatPrice(bid.proposed_price)} + 배달 {formatPrice(bid.delivery_fee)}</div>
-                        </div>
-                      </div>
-                      <div className="agent-response-reason">{bid.message}</div>
-                      <button className="select-agent-btn" style={{ marginTop: 8 }}>이 에이전트 선택</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 기사 입찰 대기 */}
-            {phase === "delivery_drivers" && (
-              <div className="agent-results-chat">
-                <div className="chat-msg system">
-                  <div className="chat-bot-icon">E</div>
-                  <div className="chat-bubble system">
-                    <p>기사님을 기다리고 있어요... ({driverBids.length}명 입찰)</p>
-                  </div>
-                </div>
-
-                {driverBids.length > 0 ? (
-                  <div className="agent-response-grid">
-                    {driverBids.map((bid) => (
-                      <div key={bid.id} className="agent-response-card" style={{ cursor: "pointer" }}
-                        onClick={() => handleAcceptDriver(bid.id)}>
-                        <div className="agent-response-header">
-                          <div className="agent-avatar">🛵</div>
-                          <div className="agent-response-info">
-                            <div className="agent-response-name">{bid.driver_name || `기사 ${bid.driver_id}`}</div>
-                            <div className="agent-response-meta">배달비 {formatPrice(bid.proposed_fee)} · 예상 {bid.estimated_time}분</div>
-                          </div>
-                        </div>
-                        {bid.message && <div className="agent-response-reason">{bid.message}</div>}
-                        <button className="select-agent-btn" style={{ marginTop: 8, background: "#34a853" }}>이 기사 선택</button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ textAlign: "center", padding: 20 }}>
-                    <button className="refresh-btn" onClick={refreshDriverBids}>기사 새로고침</button>
-                    <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 8 }}>
-                      기사님이 아직 입찰하지 않았어요. /driver 에서 기사로 등록하고 입찰해보세요!
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 배달중 */}
-            {phase === "delivering" && (
-              <div style={{ textAlign: "center", padding: "30px 0" }}>
-                <div style={{ fontSize: 56, marginBottom: 12, animation: "ride 2s ease-in-out infinite" }}>🛵</div>
-                <p style={{ fontSize: 16, fontWeight: 600 }}>배달 중...</p>
-                <p style={{ fontSize: 13, color: "#9aa0a6", marginBottom: 20 }}>기사님이 음식을 가져오고 있어요</p>
-                <div style={{ maxWidth: 200, margin: "0 auto 20px" }}>
-                  <div className="progress-bar"><div className="progress-fill" /></div>
-                </div>
-                <button className="confirm-btn-yes" onClick={() => setPhase("delivery_review")} style={{ maxWidth: 300 }}>
-                  배달 받았어요
-                </button>
-              </div>
-            )}
-
-            {/* 리뷰 */}
-            {phase === "delivery_review" && (
-              <div style={{ maxWidth: 400, margin: "20px auto", background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e0e0e0" }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>배달은 어땠나요?</h3>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f0f0f0" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>에이전트</span>
-                  <StarSelector value={agentRating} onChange={setAgentRating} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f0f0f0" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>기사</span>
-                  <StarSelector value={driverRating} onChange={setDriverRating} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f0f0f0" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>음식</span>
-                  <StarSelector value={foodRating} onChange={setFoodRating} />
-                </div>
-                <input
-                  type="text"
-                  value={reviewComment}
-                  onChange={e => setReviewComment(e.target.value)}
-                  placeholder="한마디 남기기"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid #dfe1e5", borderRadius: 8, marginTop: 12, fontSize: 14, outline: "none" }}
-                />
-                <button className="confirm-btn-yes" onClick={handleDeliveryReview} style={{ width: "100%", marginTop: 12 }}>
-                  평가 보내기
-                </button>
-              </div>
-            )}
+            {/* 배달 플로우 */}
+            <DeliveryFlow
+              phase={phase}
+              deliveryOrderId={deliveryOrderId}
+              deliveryBids={deliveryBids}
+              driverBids={driverBids}
+              agentRating={agentRating}
+              driverRating={driverRating}
+              foodRating={foodRating}
+              reviewComment={reviewComment}
+              onSelectAgent={handleSelectDeliveryAgent}
+              onAcceptDriver={handleAcceptDriver}
+              onRefreshDrivers={refreshDriverBids}
+              onDeliveryReview={handleDeliveryReview}
+              onSetPhase={(p) => setPhase(p as typeof phase)}
+              onSetAgentRating={setAgentRating}
+              onSetDriverRating={setDriverRating}
+              onSetFoodRating={setFoodRating}
+              onSetReviewComment={setReviewComment}
+              onAddChatMsg={(msg) => setChatMsgs(prev => [...prev, msg])}
+            />
 
             <div ref={chatEndRef} />
           </div>

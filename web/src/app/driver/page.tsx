@@ -323,15 +323,15 @@ export default function DriverPage() {
             {/* Stats */}
             <div className="driver-stats">
               <div className="stat-card">
-                <div className="stat-num">{driver.total_deliveries}</div>
+                <div className="stat-num">{driver.total_deliveries ?? 0}</div>
                 <div className="stat-label">총 배달</div>
               </div>
               <div className="stat-card">
-                <div className="stat-num">{driver.rating.toFixed(1)}</div>
+                <div className="stat-num">{(driver.rating ?? 0).toFixed(1)}</div>
                 <div className="stat-label">평점</div>
               </div>
               <div className="stat-card">
-                <div className="stat-num">{driver.review_count}</div>
+                <div className="stat-num">{driver.review_count ?? 0}</div>
                 <div className="stat-label">리뷰</div>
               </div>
             </div>

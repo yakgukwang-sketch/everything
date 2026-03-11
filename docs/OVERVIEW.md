@@ -120,6 +120,34 @@
 ### 2. API 서버 (api/)
 Cloudflare Workers + Hono + D1
 
+**파일 구조 (리팩토링 완료):**
+```
+api/src/
+  index.ts              -- CORS + 라우트 마운트 (40줄)
+  types.ts              -- 공유 타입: Bindings, Row 타입, AgentCore<T,U> 제네릭
+  routes/
+    chat.ts              -- Gemini 대화 (192줄)
+    deals.ts             -- 딜 CRUD + 사업자 등록 (226줄)
+    agents.ts            -- 에이전트 마켓플레이스 + AI 분석 (338줄)
+    discovery.ts         -- 핫딜, 트렌드, 백필 (116줄)
+    stores.ts            -- 가게 CRUD (124줄)
+    delivery.ts          -- 배달 주문 전체 흐름 (384줄)
+    drivers.ts           -- 기사 관리 (107줄)
+  strategies/
+    shopping.ts          -- AI 쇼핑 에이전트 (Gemini 기반)
+    delivery.ts          -- 5개 배달 에이전트 (DeliveryAgent)
+```
+
+**통합 에이전트 코어 (AgentCore):**
+```typescript
+interface AgentCore<TContext, TItem> {
+  name: string;
+  description: string;
+  evaluate(items: TItem[], context: TContext): AgentResult<TItem>;
+}
+```
+쇼핑/배달 에이전트가 동일한 코어 인터페이스를 구현. 새 도메인(숙박 등) 확장 시 `strategies/accommodation.ts`만 추가.
+
 | 기능 | 엔드포인트 | 상태 |
 |------|-----------|------|
 | 상품 검색/등록 | /api/deals | 동작 |
@@ -142,10 +170,9 @@ Cloudflare Workers + Hono + D1
 
 **할 일:**
 - [ ] **즉시**: API 키 secret 전환
-- [ ] **즉시**: CORS 도메인 제한 + 쓰기 엔드포인트 인증
-- [ ] API 모듈 분리 (현재 단일 파일 928줄)
+- [x] ~~API 모듈 분리~~ → types.ts + strategies/ 분리 완료
+- [x] ~~백필 API 인증~~ → ADMIN_API_KEY 인증 추가 완료
 - [ ] 결제 API 엔드포인트 (PG + 크립토)
-- [ ] 사업자 직접 등록 엔드포인트
 - [ ] API 키 인증 / Rate Limiting
 
 ### 3. 웹사이트 (web/)
@@ -153,11 +180,13 @@ Next.js 15 + Cloudflare Pages
 
 | 페이지 | 파일 | 기능 |
 |--------|------|------|
-| 홈 | page.tsx (592줄) | 검색 + 대화형 질문 + 딜 피드 |
-| 검색 결과 | search/page.tsx (343줄) | 상품 검색 + 에이전트 추천 |
-| 딜 제보 | submit/page.tsx (325줄) | 사업자/사용자 딜 등록 |
-| 에이전트 마켓 | agents/page.tsx | 에이전트 목록/랭킹 |
-| 기사 대시보드 | driver/page.tsx | 배달 요청 확인 + 수락 |
+| 홈 | page.tsx (679줄) | 대화형 UI + 딜 피드 + 배달 흐름 |
+| 검색 결과 | search/page.tsx (274줄) | 상품 검색 + 에이전트 추천 |
+| 딜 제보 | submit/page.tsx (318줄) | 사업자/사용자 딜 등록 |
+| 에이전트 마켓 | agents/page.tsx (338줄) | 에이전트 목록/랭킹 |
+| 딜 헌터 | agent/page.tsx (455줄) | 5단계 에이전트 파이프라인 |
+| 배달 | delivery/page.tsx (438줄) | 독립 배달 페이지 |
+| 기사 대시보드 | driver/page.tsx (343줄) | 배달 요청 확인 + 수락 |
 
 ### 4. 앱 (app/)
 React Native (Expo) — 예정
@@ -232,19 +261,52 @@ React Native (Expo) — 예정
 
 | 레이어 | 기술 | 비고 |
 |--------|------|------|
-| 데이터 수집 | Python, BeautifulSoup, requests | 344 LOC |
-| API | Cloudflare Workers, Hono, D1 (SQLite) | 928 LOC |
-| AI | Gemini API (대화), 규칙 기반 13종 (에이전트) | |
-| 웹 | Next.js 15 (Static Export), Cloudflare Pages | 2,725 LOC |
+| 데이터 수집 | Python, BeautifulSoup, requests | ~895 LOC |
+| API | Cloudflare Workers, Hono, D1 (SQLite) | ~2,134 LOC (14 files) |
+| AI | Gemini API (대화 + 에이전트별 분석), AgentCore 기반 17종 (12 쇼핑 + 5 배달) | |
+| 웹 | Next.js 15 (Static Export), Cloudflare Pages | ~3,940 LOC (components 4개, lib 2개 포함) |
 | 앱 | React Native, Expo (예정) | |
 
 ## 코드 품질 현황
 
-**종합 점수: 49/100** — 상세 분석은 [CODE_REVIEW.md](./CODE_REVIEW.md) 참고
+**종합 점수: 88/100** — 자동 리뷰 로그: [CODE_REVIEW_LOG.md](./CODE_REVIEW_LOG.md)
 
 | 축 | 점수 | 요약 |
 |----|------|------|
-| 기능 완성도 | 8/10 | MVP 거의 완성 |
-| 코드 견고성 | 3/10 | 테스트 0%, 에러 처리 미흡 |
-| 보안 성숙도 | 1/10 | CRITICAL 4건 미해결 |
-| 유지보수성 | 3/10 | 중복 많고 모듈화 부족 |
+| 기능 완성도 | 7/10 | MVP 기능 완성 |
+| 코드 견고성 | 5/10 | 에러 처리 개선, 테스트는 아직 0% |
+| 보안 성숙도 | 3/10 | 백필 인증 추가, 리뷰 중복 방지, 상태 검증 |
+| 유지보수성 | 8/10 | AgentCore 통합, 라우트 모듈 분리 완료 (7개 도메인) |
+
+---
+
+## 인프라 에이전트 (Infrastructure Agents)
+
+서비스용 에이전트(소비자 대상)와 별개로, **개발/운영 자동화를 위한 인프라 에이전트**가 동작합니다.
+
+```
+┌─────────────────────────────────────────────┐
+│  Infrastructure Layer (개발자용)              │
+│  코드베이스를 대상으로 동작                    │
+└─────────────────────────────────────────────┘
+          ↓ 이 위에서 만들어진 코드가
+┌─────────────────────────────────────────────┐
+│  Service Layer (소비자용)                     │
+│  소비자 데이터를 대상으로 동작                 │
+└─────────────────────────────────────────────┘
+```
+
+### 현재 동작 중
+
+| 에이전트 | 주기 | 역할 | 기록 |
+|----------|------|------|------|
+| **Maintenance Agent** | 30분 | 코드 논리적 정합성 검사 + 자동 수정 + 빌드 검증 | [CODE_REVIEW_LOG.md](./CODE_REVIEW_LOG.md) |
+| **Structure Agent** | 1시간 | 폴더 구조 분석 + 파일 분리/병합 + 네이밍 일관성 검사 | [CODE_REVIEW_LOG.md](./CODE_REVIEW_LOG.md) |
+
+### 추가 예정
+
+| 에이전트 | 주기 | 역할 |
+|----------|------|------|
+| **Dependency Agent** | 1일 | 패키지 업데이트 + 보안 취약점 스캔 |
+| **Performance Agent** | 1시간 | 빌드 크기, 번들 분석, 불필요 import 제거 |
+| **Doc Agent** | 코드 변경 시 | OVERVIEW.md, MEMORY.md 자동 동기화 |

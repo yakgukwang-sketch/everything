@@ -167,13 +167,16 @@ export const CATEGORIES = [
 // === Utils ===
 
 export function formatPrice(price: number): string {
-  if (!price) return "";
+  if (price == null) return "";
+  if (price === 0) return "0원";
   return price.toLocaleString() + "원";
 }
 
 export function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
+  const parsed = new Date(dateStr).getTime();
+  if (isNaN(parsed)) return "";
+  const diff = Date.now() - parsed;
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "방금";
   if (mins < 60) return `${mins}분 전`;

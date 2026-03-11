@@ -221,7 +221,7 @@ function SearchContent() {
                   <div style={{ display: "flex", gap: 16 }}>
                     {deal.image_url && (
                       <div className="result-thumb">
-                        <img src={deal.image_url} alt={deal.title} referrerPolicy="no-referrer" />
+                        <img src={deal.image_url} alt={deal.title} referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       </div>
                     )}
                     <div style={{ flex: 1 }}>

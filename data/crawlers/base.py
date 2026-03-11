@@ -26,6 +26,7 @@ class Store:
     source: str = ""
     menu_info: str = ""
     image_url: str = ""
+    verified: bool = False
 
 
 @dataclass
@@ -51,7 +52,8 @@ def upload_deals(deals: list[Deal]):
     if ADMIN_API_KEY:
         headers["Authorization"] = f"Bearer {ADMIN_API_KEY}"
     try:
-        resp = requests.post(f"{API_URL}/api/deals", json=data, headers=headers)
+        resp = requests.post(f"{API_URL}/api/deals", json=data, headers=headers, timeout=15)
+        resp.raise_for_status()
         result = resp.json()
         print(f"Uploaded {result.get('inserted', 0)} deals")
         return result
@@ -71,7 +73,8 @@ def upload_stores(stores: list[Store]):
     if ADMIN_API_KEY:
         headers["Authorization"] = f"Bearer {ADMIN_API_KEY}"
     try:
-        resp = requests.post(f"{API_URL}/api/stores", json=data, headers=headers)
+        resp = requests.post(f"{API_URL}/api/stores", json=data, headers=headers, timeout=15)
+        resp.raise_for_status()
         result = resp.json()
         print(f"Uploaded {result.get('inserted', 0)} stores")
         return result

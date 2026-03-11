@@ -53,6 +53,8 @@ def crawl_page(divpage, page):
                 image_url = img.get("src", "")
                 if image_url.startswith("//"):
                     image_url = f"https:{image_url}"
+                elif image_url and not image_url.startswith("http"):
+                    image_url = f"https://www.ppomppu.co.kr{image_url}"
 
         posts.append({
             "no": int(m.group(1)),
@@ -106,6 +108,9 @@ def main():
                     break
                 time.sleep(2)
                 continue
+
+        if errors > 30:
+            break
 
         if len(all_posts) >= MAX_POSTS:
             print(f"  {MAX_POSTS}개 도달, 중단")
