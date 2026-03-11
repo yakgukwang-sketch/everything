@@ -6,6 +6,9 @@ out/
 __pycache__/
 *.pyc
 deals_backup.json
+stores_backup.json
+naver_deals.json
+naver_insert_*.sql
 ppomppu_debug.*
 ppomppu_test.json
 clien_test.json
