@@ -121,3 +121,15 @@ export interface DeliveryContext {
 
 export type ShoppingAgent = AgentCore<ShoppingContext, DealRow>;
 export type DeliveryAgent = AgentCore<DeliveryContext, StoreRow>;
+
+// ===== Agent Chat Config =====
+
+export interface AgentChatConfig {
+  name: string;
+  icon: string;
+  description: string;
+  systemPrompt: string;
+  searchSort: string;       // SQL ORDER BY clause for DB search
+  searchLimit: number;      // max items to fetch from DB
+  greeting: string;         // first message when chat starts
+}

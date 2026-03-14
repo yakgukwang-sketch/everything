@@ -35,6 +35,20 @@ export type ChatMessage = {
   role: "user" | "system";
   text: string;
   options?: string[];
+  recommendations?: {
+    deal: Deal;
+    comment: string;
+  }[];
+};
+
+// === Agent Chat Types ===
+
+export type AgentInfo = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  greeting: string;
 };
 
 // === Delivery Types ===

@@ -9,6 +9,7 @@ import storeRoutes from "./routes/stores";
 import deliveryRoutes from "./routes/delivery";
 import driverRoutes from "./routes/drivers";
 import developerRoutes from "./routes/developers";
+import agentChatRoutes from "./routes/agent-chat";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -33,6 +34,7 @@ app.route("/", storeRoutes);
 app.route("/", deliveryRoutes);
 app.route("/", driverRoutes);
 app.route("/", developerRoutes);
+app.route("/", agentChatRoutes);
 
 // 헬스체크
 app.get("/health", (c) => {

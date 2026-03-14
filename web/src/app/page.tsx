@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  API_URL, Deal, AgentResponse, ChatMessage, AgentBid, DriverBid,
-  AGENT_ICONS, AGENT_INTROS,
+  API_URL, Deal, ChatMessage, AgentBid, DriverBid, AgentInfo,
   formatPrice, sanitizeUrl,
 } from "@/lib/shared";
 import { detectDelivery, extractArea, extractFoodType, extractBudget, extractQuantity } from "@/lib/delivery-utils";
@@ -13,21 +12,28 @@ import DeliveryFlow from "@/components/DeliveryFlow";
 
 type DeliveryBid = AgentBid & { agent_name?: string; store_name?: string };
 
+// 하드코딩된 에이전트 목록 (API 실패 시 폴백)
+const FALLBACK_AGENTS: AgentInfo[] = [
+  { id: "gamja", name: "감자", icon: "🥔", description: "싼 거 전문! 가성비 끝판왕", greeting: "안녕! 나 감자 🥔 싼 거 전문이야 ㅋㅋ 뭐 찾아?" },
+  { id: "chip", name: "칩", icon: "💻", description: "노트북 전문가! 사양·트렌드·할인 다 알려줌", greeting: "안녕! 나 칩 💻 노트북이면 나한테 물어봐. 용도가 뭐야?" },
+];
+
 export default function Home() {
   const [input, setInput] = useState("");
   const [chatMsgs, setChatMsgs] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
-  const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
-  const [agentLoading, setAgentLoading] = useState(false);
   const [phase, setPhase] = useState<
-    "idle" | "chatting" | "agents" |
+    "idle" | "chatting" | "agent_chat" |
     "delivery_bids" | "delivery_drivers" | "delivering" | "delivery_review"
   >("idle");
-  const [pendingQuery, setPendingQuery] = useState<{ query: string; parsed: { product?: string; specs?: Record<string, string>; budget?: string; keywords?: string[] } | null } | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [feedTab, setFeedTab] = useState<"hot" | "latest">("hot");
   const [feedFilter, setFeedFilter] = useState("all");
   const [feedLoading, setFeedLoading] = useState(false);
+
+  // 에이전트 채팅 state
+  const [activeAgent, setActiveAgent] = useState<AgentInfo | null>(null);
+  const [agents, setAgents] = useState<AgentInfo[]>(FALLBACK_AGENTS);
 
   // 배달 state
   const [deliveryOrderId, setDeliveryOrderId] = useState<number | null>(null);
@@ -45,6 +51,16 @@ export default function Home() {
   const chatInputRef = useRef<HTMLInputElement>(null);
   const agentSelectingRef = useRef(false);
   const router = useRouter();
+
+  // 에이전트 목록 로드
+  useEffect(() => {
+    fetch(`${API_URL}/api/agent/list`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.agents?.length > 0) setAgents(data.agents);
+      })
+      .catch(() => {}); // fallback 사용
+  }, []);
 
   // 피드 데이터 로드
   const loadFeed = async (tab: "hot" | "latest") => {
@@ -72,9 +88,52 @@ export default function Home() {
     if (!chatLoading && !deliveryLoading) {
       setTimeout(() => chatInputRef.current?.focus(), 100);
     }
-  }, [chatMsgs, agentResponses, deliveryBids, driverBids, chatLoading, deliveryLoading, phase]);
+  }, [chatMsgs, deliveryBids, driverBids, chatLoading, deliveryLoading, phase]);
 
-  // Gemini 대화
+  // === 에이전트 1:1 채팅 ===
+
+  const startAgentChat = (agent: AgentInfo) => {
+    setActiveAgent(agent);
+    setPhase("agent_chat");
+    setChatMsgs([{ role: "system", text: agent.greeting }]);
+  };
+
+  const sendToAgent = async (newMsgs: ChatMessage[], agentOverride?: AgentInfo) => {
+    const agent = agentOverride || activeAgent;
+    if (!agent) return;
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/agent/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent_id: agent.id,
+          messages: newMsgs.map(m => ({ role: m.role === "user" ? "user" : "system", text: m.text })),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const reply = data.reply || "음...";
+        const options = data.options || [];
+        const recommendations = (data.recommendations || []).map((r: { deal: Deal; comment: string }) => ({
+          deal: r.deal,
+          comment: r.comment,
+        }));
+        setChatMsgs([...newMsgs, { role: "system", text: reply, options, recommendations }]);
+      } else {
+        setChatMsgs(prev => [...prev, { role: "system", text: "잠깐 문제 생겼어 😅 다시 말해줘!" }]);
+      }
+    } catch (err) {
+      console.error(err);
+      setChatMsgs(prev => [...prev, { role: "system", text: "네트워크 오류! 다시 시도해줘." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // === 배달 전용 Gemini 대화 (기존 /api/chat) ===
+
   const sendChat = async (newMsgs: ChatMessage[]) => {
     setChatLoading(true);
     try {
@@ -92,11 +151,9 @@ export default function Home() {
         setChatMsgs(updated);
 
         if (data.ready && data.query) {
-          // Gemini가 type을 알려줌: "delivery" or "shopping"
           const qType = data.query.type || "";
 
           if (qType === "delivery") {
-            // 배달이면 바로 배달 플로우로
             const food = data.query.food || data.query.product || "";
             const area = data.query.area || extractArea(newMsgs.map(m => m.text).join(" "));
             const quantity = data.query.quantity || "1인분";
@@ -105,18 +162,8 @@ export default function Home() {
 
             setChatMsgs(prev => [...prev, { role: "system", text: `배달 주문이네! ${area} ${food} ${quantity} — 에이전트들이 경쟁 입찰 중...` }]);
             sendDeliveryRequest(deliveryQuery);
-          } else {
-            // 쇼핑이면 기존 confirm 플로우
-            const keywords = data.query.keywords || [];
-            const product = data.query.product || "";
-            const specs = data.query.specs ? Object.values(data.query.specs).join(" ") : "";
-            const budget = data.query.budget || "";
-            const finalQuery = `${product} ${specs} ${budget} ${keywords.join(" ")}`.trim();
-            // confirm 없이 바로 에이전트에게 전달
-            setPhase("agents");
-            setChatMsgs(prev => [...prev, { role: "system", text: "좋아요! 에이전트들에게 물어볼게요." }]);
-            sendToAgents(finalQuery);
           }
+          // 쇼핑은 더 이상 여기서 처리 안 함 — 에이전트 1:1 채팅으로 전환됨
         }
       }
     } catch (err) {
@@ -125,24 +172,6 @@ export default function Home() {
     } finally {
       setChatLoading(false);
     }
-  };
-
-  // 쇼핑 에이전트 전달
-  const sendToAgents = async (query: string) => {
-    setAgentLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/agents/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      const data = await res.json();
-      const sorted = (data.responses || []).sort(
-        (a: AgentResponse, b: AgentResponse) => (b.rating || 0) - (a.rating || 0)
-      );
-      setAgentResponses(sorted);
-    } catch (err) { console.error(err); }
-    finally { setAgentLoading(false); }
   };
 
   // 배달 주문 생성
@@ -157,13 +186,7 @@ export default function Home() {
       const res = await fetch(`${API_URL}/api/delivery/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          consumer_request: query,
-          area,
-          food_type: foodType,
-          budget,
-          quantity,
-        }),
+        body: JSON.stringify({ consumer_request: query, area, food_type: foodType, budget, quantity }),
       });
       const data = await res.json();
       if (data.success) {
@@ -199,7 +222,7 @@ export default function Home() {
   const handleSelectDeliveryAgent = async (bidId: number) => {
     if (!deliveryOrderId || deliveryLoading) return;
     if (phase !== "delivery_bids") return;
-    if (agentSelectingRef.current) return; // ref 기반 중복 클릭 방지
+    if (agentSelectingRef.current) return;
     agentSelectingRef.current = true;
     setDeliveryLoading(true);
     setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택하는 중..." }]);
@@ -211,7 +234,6 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        // 주문 상세 조회해서 driver bids 가져오기
         const orderRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}`);
         const orderData = await orderRes.json();
         setDriverBids(orderData.data?.driver_bids || []);
@@ -267,12 +289,7 @@ export default function Home() {
       const reviewRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent_rating: agentRating,
-          driver_rating: driverRating,
-          food_rating: foodRating,
-          comment: reviewComment,
-        }),
+        body: JSON.stringify({ agent_rating: agentRating, driver_rating: driverRating, food_rating: foodRating, comment: reviewComment }),
       });
       const reviewData = await reviewRes.json();
       if (reviewData.success) {
@@ -305,33 +322,39 @@ export default function Home() {
     const text = input.trim();
     setInput("");
 
+    // 에이전트 1:1 채팅 중이면 에이전트에게 전송
+    if (phase === "agent_chat" && activeAgent) {
+      const newMsgs = [...chatMsgs, { role: "user" as const, text }];
+      setChatMsgs(newMsgs);
+      sendToAgent(newMsgs);
+      return;
+    }
+
     const newMsgs = [...chatMsgs, { role: "user" as const, text }];
     setChatMsgs(newMsgs);
 
-    if (phase === "idle" || phase === "agents" || phase === "delivery_review") {
-      setPhase("chatting");
-      setAgentResponses([]);
-      setDeliveryBids([]);
-      setDriverBids([]);
-      setDeliveryOrderId(null);
-      setPendingQuery(null);
+    if (phase === "idle" || phase === "delivery_review") {
+      // 배달 키워드 감지하면 배달 플로우
+      if (detectDelivery(text)) {
+        setPhase("chatting");
+        sendChat(newMsgs);
+        return;
+      }
+      // 그 외 쇼핑 → 감자 에이전트로 바로 연결
+      const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
+      setActiveAgent(gamja);
+      setPhase("agent_chat");
+      const agentMsgs: ChatMessage[] = [
+        { role: "system", text: gamja.greeting },
+        { role: "user", text },
+      ];
+      setChatMsgs(agentMsgs);
+      sendToAgent(agentMsgs, gamja);
+      return;
     }
-    sendChat(newMsgs);
-  };
 
-  // 바로 에이전트에게 보내기
-  const handleDirectSend = () => {
-    if (chatMsgs.length === 0) return;
-    const userMsgs = chatMsgs.filter(m => m.role === "user").map(m => m.text);
-    const query = userMsgs.join(" ");
-    const isDelivery = detectDelivery(query);
-    if (isDelivery) {
-      setChatMsgs(prev => [...prev, { role: "system", text: "배달 주문이네요! 에이전트들이 최적의 가게를 찾고 있어요..." }]);
-      sendDeliveryRequest(query);
-    } else {
-      setPhase("agents");
-      setChatMsgs(prev => [...prev, { role: "system", text: "좋아요! 에이전트들에게 물어볼게요." }]);
-      sendToAgents(query);
+    if (phase === "chatting") {
+      sendChat(newMsgs);
     }
   };
 
@@ -340,26 +363,31 @@ export default function Home() {
     if (chatLoading) return;
     const newMsgs = [...chatMsgs, { role: "user" as const, text: option }];
     setChatMsgs(newMsgs);
-    sendChat(newMsgs);
+    if (phase === "agent_chat") {
+      sendToAgent(newMsgs);
+    } else {
+      sendChat(newMsgs);
+    }
   };
 
   // 새 대화
   const handleReset = () => {
     setChatMsgs([]);
     setPhase("idle");
-    setAgentResponses([]);
+    setActiveAgent(null);
     setDeliveryBids([]);
     setDriverBids([]);
     setDeliveryOrderId(null);
-    setAgentLoading(false);
     setChatLoading(false);
     setDeliveryLoading(false);
-    setPendingQuery(null);
     setAgentRating(5);
     setDriverRating(5);
     setFoodRating(5);
     setReviewComment("");
   };
+
+  // 현재 에이전트 아이콘
+  const botIcon = activeAgent?.icon || "E";
 
   return (
     <div className="main">
@@ -374,6 +402,30 @@ export default function Home() {
         <div className="hero">
           <h1 className="logo">everything</h1>
           <p className="tagline">당신을 위한 세일즈맨</p>
+
+          {/* 에이전트 카드 섹션 */}
+          <div className="agent-cards-section">
+            {agents.map(agent => (
+              <div
+                key={agent.id}
+                className="agent-select-card"
+                onClick={() => startAgentChat(agent)}
+              >
+                <div className="agent-select-icon">{agent.icon}</div>
+                <div className="agent-select-info">
+                  <div className="agent-select-name">{agent.name} 에이전트</div>
+                  <div className="agent-select-desc">{agent.description}</div>
+                </div>
+              </div>
+            ))}
+            <div className="agent-select-card agent-coming-soon">
+              <div className="agent-select-icon" style={{ opacity: 0.4 }}>🔜</div>
+              <div className="agent-select-info">
+                <div className="agent-select-name" style={{ opacity: 0.5 }}>더 많은 에이전트</div>
+                <div className="agent-select-desc" style={{ opacity: 0.4 }}>coming soon...</div>
+              </div>
+            </div>
+          </div>
 
           <form className="search-form" onSubmit={handleSubmit}>
             <div className="search-wrapper">
@@ -400,10 +452,23 @@ export default function Home() {
               "이어폰 사고싶어",
             ].map(ex => (
               <button key={ex} className="example-chip" onClick={() => {
-                const msgs = [{ role: "user" as const, text: ex }];
-                setChatMsgs(msgs);
-                setPhase("chatting");
-                sendChat(msgs);
+                if (detectDelivery(ex)) {
+                  const msgs = [{ role: "user" as const, text: ex }];
+                  setChatMsgs(msgs);
+                  setPhase("chatting");
+                  sendChat(msgs);
+                } else {
+                  // 쇼핑 → 감자 에이전트
+                  const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
+                  setActiveAgent(gamja);
+                  setPhase("agent_chat");
+                  const agentMsgs: ChatMessage[] = [
+                    { role: "system", text: gamja.greeting },
+                    { role: "user", text: ex },
+                  ];
+                  setChatMsgs(agentMsgs);
+                  sendToAgent(agentMsgs, gamja);
+                }
               }}>
                 {ex}
               </button>
@@ -425,23 +490,73 @@ export default function Home() {
         <div className="chat-container">
           <div className="chat-header">
             <div className="results-logo" onClick={handleReset} style={{ cursor: "pointer" }}>
-              <span style={{ color: "#4285f4" }}>e</span><span style={{ color: "#ea4335" }}>v</span><span>e</span>
-              <span style={{ color: "#4285f4" }}>r</span><span style={{ color: "#34a853" }}>y</span><span>t</span>
-              <span style={{ color: "#fbbc05" }}>h</span><span>i</span><span style={{ color: "#ea4335" }}>n</span>
-              <span style={{ color: "#4285f4" }}>g</span>
+              {activeAgent ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 24 }}>{activeAgent.icon}</span>
+                  <span style={{ fontWeight: 700 }}>{activeAgent.name}</span>
+                </span>
+              ) : (
+                <>
+                  <span style={{ color: "#4285f4" }}>e</span><span style={{ color: "#ea4335" }}>v</span><span>e</span>
+                  <span style={{ color: "#4285f4" }}>r</span><span style={{ color: "#34a853" }}>y</span><span>t</span>
+                  <span style={{ color: "#fbbc05" }}>h</span><span>i</span><span style={{ color: "#ea4335" }}>n</span>
+                  <span style={{ color: "#4285f4" }}>g</span>
+                </>
+              )}
             </div>
-            <button className="reset-btn" onClick={handleReset}>새 질문</button>
+            <button className="reset-btn" onClick={handleReset}>새 대화</button>
           </div>
 
           <div className="chat-messages">
             {chatMsgs.map((msg, i) => (
               <div key={i}>
                 <div className={`chat-msg ${msg.role}`}>
-                  {msg.role === "system" && <div className="chat-bot-icon">E</div>}
+                  {msg.role === "system" && <div className="chat-bot-icon">{botIcon}</div>}
                   <div className={`chat-bubble ${msg.role}`}>
                     <p>{msg.text}</p>
                   </div>
                 </div>
+
+                {/* 추천 상품 카드 (인라인) */}
+                {msg.role === "system" && msg.recommendations && msg.recommendations.length > 0 && (
+                  <div className="agent-recommend-cards">
+                    {msg.recommendations.map((rec, j) => (
+                      <a
+                        key={j}
+                        href={sanitizeUrl(rec.deal.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="agent-recommend-card"
+                      >
+                        {rec.deal.image_url && (
+                          <div className="agent-recommend-img">
+                            <img
+                              src={rec.deal.image_url}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          </div>
+                        )}
+                        <div className="agent-recommend-info">
+                          <div className="agent-recommend-title">
+                            {rec.deal.title?.substring(0, 40)}{(rec.deal.title?.length || 0) > 40 ? "..." : ""}
+                          </div>
+                          <div className="agent-recommend-price">
+                            {rec.deal.sale_price > 0 ? formatPrice(rec.deal.sale_price) : ""}
+                            {rec.deal.discount_rate > 0 && (
+                              <span className="agent-recommend-discount">{rec.deal.discount_rate}% OFF</span>
+                            )}
+                          </div>
+                          {rec.comment && <div className="agent-recommend-comment">{rec.comment}</div>}
+                          <div className="agent-recommend-source">{rec.deal.source}</div>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {/* 선택지 버튼 */}
                 {msg.role === "system" && msg.options && msg.options.length > 0 && (
                   <div className="chat-options" style={i !== chatMsgs.length - 1 ? { opacity: 0.5, pointerEvents: "none" } : {}}>
                     {msg.options.map((opt, j) => (
@@ -456,85 +571,11 @@ export default function Home() {
 
             {(chatLoading || deliveryLoading) && (
               <div className="chat-msg system">
-                <div className="chat-bot-icon">E</div>
+                <div className="chat-bot-icon">{botIcon}</div>
                 <div className="chat-bubble system">
                   <div className="typing-indicator">
                     <span></span><span></span><span></span>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* 바로 에이전트에게 보내기 버튼 */}
-            {phase === "chatting" && !chatLoading && chatMsgs.length >= 2 && (
-              <div className="chat-skip">
-                <button className="skip-btn" onClick={handleDirectSend}>
-                  이 정도면 충분해요 — 에이전트에게 맡기기
-                </button>
-              </div>
-            )}
-
-            {/* 에이전트 로딩 (쇼핑) */}
-            {agentLoading && (
-              <div className="chat-msg system">
-                <div className="chat-bot-icon">E</div>
-                <div className="chat-bubble system">
-                  <p>에이전트들이 경쟁 중...</p>
-                  <div className="loading" style={{ padding: "10px 0" }}>
-                    <div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 쇼핑 에이전트 응답 */}
-            {agentResponses.length > 0 && (
-              <div className="agent-results-chat">
-                <div className="chat-msg system">
-                  <div className="chat-bot-icon">E</div>
-                  <div className="chat-bubble system">
-                    <p>에이전트들이 추천을 준비했어요!</p>
-                  </div>
-                </div>
-                <div className="agent-response-grid">
-                  {agentResponses.slice(0, 6).map((r, i) => (
-                    <div key={i} className={`agent-response-card ${i === 0 ? "agent-best" : ""}`}>
-                      <div className="agent-response-header">
-                        <div className="agent-avatar">{AGENT_ICONS[r.agent_name] || "🤖"}</div>
-                        <div className="agent-response-info">
-                          <div className="agent-response-name">
-                            {r.agent_name}
-                            {i === 0 && <span className="best-badge">BEST</span>}
-                          </div>
-                          <div className="agent-response-meta">
-                            ★ {(r.rating || 0).toFixed(1)} · 수수료 {r.commission_rate}%
-                          </div>
-                        </div>
-                      </div>
-                      {AGENT_INTROS[r.agent_name] && (
-                        <div className="agent-intro">{AGENT_INTROS[r.agent_name]}</div>
-                      )}
-                      <div className="agent-response-text">{r.response.recommendation}</div>
-                      <div className="agent-response-reason">{r.response.reasoning}</div>
-                      {r.response.deals && r.response.deals.length > 0 && (
-                        <div className="agent-deal-cards">
-                          {r.response.deals.slice(0, 2).map((deal, j) => (
-                            <a key={j} href={sanitizeUrl(deal.url)} target="_blank" rel="noopener noreferrer" className="agent-deal-card">
-                              {deal.image_url && (
-                                <div className="agent-deal-img">
-                                  <img src={deal.image_url} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                </div>
-                              )}
-                              <div className="agent-deal-info">
-                                <div className="agent-deal-title">{deal.title?.substring(0, 30)}{deal.title?.length > 30 ? "..." : ""}</div>
-                                {deal.sale_price > 0 && <div className="agent-deal-price">{deal.sale_price.toLocaleString()}원</div>}
-                              </div>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -574,9 +615,9 @@ export default function Home() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
+                  phase === "agent_chat" && activeAgent ? `${activeAgent.name}에게 말하기...` :
                   phase === "delivery_bids" ? "에이전트를 선택하거나 추가 질문..." :
                   phase === "delivery_drivers" ? "기사를 선택하거나 추가 질문..." :
-                  phase === "agents" ? "추가 질문이 있으면 입력하세요..." :
                   "답변을 입력하세요..."
                 }
                 autoFocus
