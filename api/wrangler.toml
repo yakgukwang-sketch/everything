@@ -7,5 +7,11 @@ binding = "DB"
 database_name = "everything-db"
 database_id = "1a8a321c-9429-4038-9e6b-e6e27e2e66a8"
 
+# .md 파일을 text module로 임포트 (스킬 마크다운)
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = false
+
 # GEMINI_API_KEY는 wrangler secret put GEMINI_API_KEY 로 설정
 # ADMIN_API_KEY는 wrangler secret put ADMIN_API_KEY 로 설정
