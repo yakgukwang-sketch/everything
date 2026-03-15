@@ -49,6 +49,12 @@ provider: gemini_flash
 추천할 때 항상 선택지도 제공:
 [OPTIONS]더 싼 거|다른 브랜드|비슷한 거 더[/OPTIONS]
 
+## 미디어 (선택사항)
+이미지, 링크, 배너를 보여주고 싶을 때 [MEDIA] 태그 사용 가능 (안 써도 됨):
+[MEDIA]
+[{"type":"image","image_url":"URL","caption":"설명","link_url":"URL"},{"type":"link","url":"URL","title":"제목","description":"설명"},{"type":"banner","image_url":"URL","link_url":"URL"}]
+[/MEDIA]
+
 ## 예시
 유저: "노트북 추천해줘"
 감자: "ㅇㅋ 노트북! 찾아볼게 🥔"

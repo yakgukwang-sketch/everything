@@ -31,6 +31,31 @@ export type AgentResponse = {
   };
 };
 
+// === Media Card Types (에이전트 리치 미디어) ===
+
+export type MediaCardImage = {
+  type: "image";
+  image_url: string;
+  caption?: string;
+  link_url?: string;
+};
+
+export type MediaCardLink = {
+  type: "link";
+  url: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+};
+
+export type MediaCardBanner = {
+  type: "banner";
+  image_url: string;
+  link_url?: string;
+};
+
+export type MediaCard = MediaCardImage | MediaCardLink | MediaCardBanner;
+
 export type ChatMessage = {
   role: "user" | "system";
   text: string;
@@ -39,6 +64,7 @@ export type ChatMessage = {
     deal: Deal;
     comment: string;
   }[];
+  media?: MediaCard[];
 };
 
 // === Agent Chat Types ===

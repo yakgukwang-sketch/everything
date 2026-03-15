@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  API_URL, Deal, ChatMessage, AgentBid, DriverBid, AgentInfo,
+  API_URL, Deal, ChatMessage, AgentBid, DriverBid, AgentInfo, MediaCard,
   formatPrice, sanitizeUrl,
 } from "@/lib/shared";
 import { detectDelivery, extractArea, extractFoodType, extractBudget, extractQuantity } from "@/lib/delivery-utils";
@@ -120,7 +120,8 @@ export default function Home() {
           deal: r.deal,
           comment: r.comment,
         }));
-        setChatMsgs([...newMsgs, { role: "system", text: reply, options, recommendations }]);
+        const media: MediaCard[] | undefined = data.media;
+        setChatMsgs([...newMsgs, { role: "system", text: reply, options, recommendations, media }]);
       } else {
         setChatMsgs(prev => [...prev, { role: "system", text: "잠깐 문제 생겼어 😅 다시 말해줘!" }]);
       }
@@ -386,6 +387,41 @@ export default function Home() {
     setReviewComment("");
   };
 
+  // 미디어 카드 렌더러
+  const renderMediaCard = (card: MediaCard, idx: number) => {
+    switch (card.type) {
+      case "image": {
+        const inner = (
+          <div className="media-card media-image" key={idx}>
+            <img src={card.image_url} alt={card.caption || ""} referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            {card.caption && <div className="media-image-caption">{card.caption}</div>}
+          </div>
+        );
+        return card.link_url ? <a key={idx} href={sanitizeUrl(card.link_url)} target="_blank" rel="noopener noreferrer">{inner}</a> : inner;
+      }
+      case "link":
+        return (
+          <a key={idx} href={sanitizeUrl(card.url)} target="_blank" rel="noopener noreferrer" className="media-card media-link">
+            {card.image_url && <img src={card.image_url} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+            <div className="media-link-text">
+              <div className="media-link-title">{card.title}</div>
+              {card.description && <div className="media-link-desc">{card.description}</div>}
+            </div>
+          </a>
+        );
+      case "banner": {
+        const inner = (
+          <div className="media-card media-banner" key={idx}>
+            <img src={card.image_url} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          </div>
+        );
+        return card.link_url ? <a key={idx} href={sanitizeUrl(card.link_url)} target="_blank" rel="noopener noreferrer">{inner}</a> : inner;
+      }
+      default:
+        return null;
+    }
+  };
+
   // 현재 에이전트 아이콘
   const botIcon = activeAgent?.icon || "E";
 
@@ -553,6 +589,13 @@ export default function Home() {
                         </div>
                       </a>
                     ))}
+                  </div>
+                )}
+
+                {/* 미디어 카드 */}
+                {msg.role === "system" && msg.media && msg.media.length > 0 && (
+                  <div className="agent-media-cards">
+                    {msg.media.map((card, j) => renderMediaCard(card, j))}
                   </div>
                 )}
 

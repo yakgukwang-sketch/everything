@@ -80,7 +80,8 @@ function applyTimeDecay(deals: DealRow[]): DealRow[] {
       const postedAt = new Date(d.posted_at || d.created_at).getTime();
       const ageDays = (now - postedAt) / (1000 * 60 * 60 * 24);
       const decay = Math.exp(-Math.LN2 / 30 * ageDays);
-      return { deal: d, score: decay };
+      const bizBoost = d.source.startsWith("biz:") ? 1.5 : 1.0;
+      return { deal: d, score: decay * bizBoost };
     })
     .sort((a, b) => b.score - a.score)
     .map(x => x.deal);
@@ -140,6 +141,7 @@ function parseAgentResponse(raw: string) {
   let options: string[] = [];
   let searchQuery: { keywords: string[]; minPrice?: number; maxPrice: number } | null = null;
   let recommendations: { dealIndex: number; comment: string }[] | null = null;
+  let media: { type: string; [key: string]: unknown }[] | null = null;
 
   const optMatch = reply.match(/\[OPTIONS\]([\s\S]*?)\[\/OPTIONS\]/);
   if (optMatch) {
@@ -163,7 +165,15 @@ function parseAgentResponse(raw: string) {
     reply = reply.replace(/\[RECOMMEND\][\s\S]*?\[\/RECOMMEND\]/, "").trim();
   }
 
-  return { reply, options, searchQuery, recommendations };
+  const mediaMatch = reply.match(/\[MEDIA\]([\s\S]*?)\[\/MEDIA\]/);
+  if (mediaMatch) {
+    try {
+      media = JSON.parse(mediaMatch[1].trim());
+    } catch { /* ignore parse error */ }
+    reply = reply.replace(/\[MEDIA\][\s\S]*?\[\/MEDIA\]/, "").trim();
+  }
+
+  return { reply, options, searchQuery, recommendations, media };
 }
 
 // ===== 라우트 =====
@@ -249,11 +259,14 @@ app.post("/api/agent/chat", async (c) => {
         comment: "",
       }));
 
+      const combinedMedia = [...(parsed.media || []), ...(parsed2.media || [])];
+
       return c.json({
         success: true,
         reply: parsed2.reply || parsed.reply || "이거 봐봐!",
         options: parsed2.options.length > 0 ? parsed2.options : ["더 싼 거", "다른 브랜드", "비슷한 거 더"],
         recommendations: finalRecs,
+        ...(combinedMedia.length > 0 && { media: combinedMedia }),
       });
     }
 
@@ -262,6 +275,7 @@ app.post("/api/agent/chat", async (c) => {
       reply: parsed.reply,
       options: parsed.options,
       recommendations: [],
+      ...(parsed.media && parsed.media.length > 0 && { media: parsed.media }),
     });
   } catch (err) {
     console.error("agent-chat error:", err);

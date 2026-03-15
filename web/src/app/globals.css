@@ -2863,6 +2863,94 @@ a {
   color: #9aa0a6;
 }
 
+/* 에이전트 미디어 카드 */
+.agent-media-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 8px 44px;
+}
+
+.media-card {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  background: #fff;
+  transition: box-shadow 0.2s;
+}
+
+.media-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+.media-image {
+  max-width: 320px;
+}
+
+.media-image img {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  display: block;
+}
+
+.media-image-caption {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.media-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  max-width: 360px;
+  border: 1px solid #e8eaed;
+  text-decoration: none;
+  color: inherit;
+}
+
+.media-link img {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.media-link-text {
+  min-width: 0;
+}
+
+.media-link-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-link-desc {
+  font-size: 12px;
+  color: #70757a;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-banner {
+  width: 100%;
+  max-width: 100%;
+}
+
+.media-banner img {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+}
+
 /* Mobile adjustments */
 @media (max-width: 600px) {
   .agent-cards-section {
