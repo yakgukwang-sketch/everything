@@ -84,6 +84,37 @@ export interface DriverRow {
   created_at: string;
 }
 
+export interface CommentRow {
+  id: number;
+  source: string;
+  post_id: string;
+  author: string;
+  content: string;
+  recommendations: number;
+  created_at: string;
+  crawled_at: string;
+}
+
+export interface PriceGuideRow {
+  id: number;
+  product: string;
+  category: string;
+  deal_count: number;
+  price_avg: number;
+  price_median: number;
+  price_min: number;
+  price_max: number;
+  price_godly: number;
+  price_good: number;
+  price_normal: number;
+  price_expensive: number;
+  avg_rec: number;
+  best_deal_title: string;
+  best_deal_price: number;
+  best_deal_rec: number;
+  updated_at: string;
+}
+
 // ===== AgentCore — 통합 에이전트 인터페이스 =====
 //
 // 모든 도메인(쇼핑, 배달, 숙박 등)의 에이전트가 공유하는 코어.

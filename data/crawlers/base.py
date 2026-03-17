@@ -30,6 +30,16 @@ class Store:
 
 
 @dataclass
+class Comment:
+    source: str
+    post_id: str
+    author: str = ""
+    content: str = ""
+    created_at: str = ""
+    recommendations: int = 0
+
+
+@dataclass
 class Deal:
     title: str
     url: str
@@ -63,6 +73,26 @@ def upload_deals(deals: list[Deal]):
         with open("deals_backup.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print("Saved backup to deals_backup.json")
+        return None
+
+
+def upload_comments(comments: list[Comment]):
+    """수집한 댓글을 API에 업로드"""
+    data = [asdict(c) for c in comments]
+    headers = {}
+    if ADMIN_API_KEY:
+        headers["Authorization"] = f"Bearer {ADMIN_API_KEY}"
+    try:
+        resp = requests.post(f"{API_URL}/api/comments", json=data, headers=headers, timeout=15)
+        resp.raise_for_status()
+        result = resp.json()
+        print(f"Uploaded {result.get('inserted', 0)} comments")
+        return result
+    except Exception as e:
+        print(f"Comment upload failed: {e}")
+        with open("comments_backup.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print("Saved backup to comments_backup.json")
         return None
 
 

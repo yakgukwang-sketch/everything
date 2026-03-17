@@ -23,10 +23,20 @@ export const AGENT_PROMPTS: Record<string, string> = {
 - "서두르세요", "곧 품절" 같은 긴급성 강조
 - 타임딜/한정 특가 위주로 분석`,
 
-  best_discount: `너는 "알뜰봇"이야. 할인율이 가장 높은 상품을 찾아 추천해.
-- 할인율(%) 기준으로 분석
-- 원가 대비 얼마나 저렴해졌는지 강조
-- 특가/무료 상품도 놓치지 않고 찾아줘`,
+  best_discount: `너는 "알뜰봇"이야. 커뮤니티 데이터 기반 적정가격을 알고 있는 가격 전문가야.
+
+핵심 역할:
+- 상품의 현재 가격이 "역대급 꿀딜/꿀딜/괜찮음/보통/비쌈/바가지" 중 어디인지 판정해
+- 가격 가이드 데이터가 있으면 반드시 참고해서 "이 가격은 꿀딜이다", "이건 보통이다" 판정을 내려줘
+- 할인율뿐 아니라, 커뮤니티에서 실제로 추천 많이 받은 가격대를 기준으로 분석
+- "보통 ~원에 올라오는데 지금 ~원이면 꿀딜이야" 식으로 구체적 비교
+- 특가/무료 상품도 놓치지 않고 찾아줘
+
+가격 가이드가 제공되면:
+- price_good 이하 = 꿀딜 (커뮤니티 추천 많았던 가격대)
+- price_avg 이하 = 괜찮음
+- price_normal 이하 = 보통
+- 그 이상 = 비쌈/바가지`,
 
   price_predict: `너는 "가격예측봇"이야. 지금 사야 할지 기다려야 할지 구매 타이밍을 분석해.
 - 현재 가격이 평균 대비 높은지 낮은지 판단
@@ -78,6 +88,35 @@ const RESPONSE_RULES = `
 topDealIndex는 deals 배열에서 가장 추천하는 딜의 인덱스 (0부터).
 confidence는 추천 확신도 (관련 상품이 없으면 0.2 이하, 딱 맞으면 0.8 이상).`;
 
+// 가격 가이드 조회 (알뜰봇용)
+async function fetchPriceGuide(query: string, deals: DealRow[], env: Bindings): Promise<string> {
+  try {
+    const keywords = query.split(/[\s,]+/).filter(w => w.length >= 2);
+    const guides: Record<string, unknown>[] = [];
+
+    for (const kw of keywords) {
+      const result = await env.DB.prepare(
+        "SELECT * FROM price_guide WHERE product LIKE ? ORDER BY deal_count DESC LIMIT 3"
+      ).bind(`%${kw}%`).all();
+      for (const r of result.results as Record<string, unknown>[]) {
+        if (!guides.find(g => g.product === r.product)) {
+          guides.push(r);
+        }
+      }
+    }
+
+    if (guides.length === 0) return "";
+
+    const lines = guides.slice(0, 5).map(g =>
+      `[${g.product}] 역대급=${(g.price_godly as number)?.toLocaleString()}원 | 꿀딜=${(g.price_good as number)?.toLocaleString()}원 | 괜찮음=${(g.price_avg as number)?.toLocaleString()}원 | 보통=${(g.price_normal as number)?.toLocaleString()}원 | 비쌈=${(g.price_expensive as number)?.toLocaleString()}원+ (${g.deal_count}건 분석, 베스트: ${g.best_deal_title} ${(g.best_deal_price as number)?.toLocaleString()}원)`
+    );
+
+    return `\n\n커뮤니티 가격 가이드 (뽐뿌 4000건 분석):\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
 // Gemini 기반 AI 전략 호출
 export async function aiShoppingStrategy(
   agentEndpoint: string,
@@ -96,7 +135,12 @@ export async function aiShoppingStrategy(
     `[${i}] ${d.title} — ${d.sale_price > 0 ? d.sale_price.toLocaleString() + '원' : '가격미정'} (${d.source}, 할인${d.discount_rate || 0}%)`
   ).join("\n");
 
-  const userContent = `검색어: "${query}"\n\n딜 목록 (${deals.length}건):\n${dealList}`;
+  // 알뜰봇이면 가격 가이드 데이터 추가
+  const priceGuideInfo = agentEndpoint === "best_discount"
+    ? await fetchPriceGuide(query, deals, env)
+    : "";
+
+  const userContent = `검색어: "${query}"\n\n딜 목록 (${deals.length}건):\n${dealList}${priceGuideInfo}`;
 
   try {
     const res = await fetch(

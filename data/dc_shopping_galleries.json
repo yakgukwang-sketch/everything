@@ -1,0 +1,443 @@
+[
+  {
+    "id": "phonesell",
+    "name": "팝니다-휴대폰",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "phonebuy",
+    "name": "삽니다-휴대폰",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "dcbuy",
+    "name": "삽니다",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "dc_sell",
+    "name": "팝니다",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "comsell",
+    "name": "팝니다-컴퓨터/주변기기",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "combuy",
+    "name": "삽니다-컴퓨터/주변기기",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "etcsell",
+    "name": "팝니다-기타물품",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "etcbuy",
+    "name": "삽니다-기타물품",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "acbuy",
+    "name": "삽니다-카메라악세사리",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "ac_sell",
+    "name": "팝니다-카메라악세사리",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "carsell",
+    "name": "팝니다-자동차용품",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "mp3sell",
+    "name": "팝니다-MP3플레이어",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "mp3buy",
+    "name": "삽니다-MP3플레이어",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "barter",
+    "name": "물물교환",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "give",
+    "name": "그냥드립니다",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "department_store",
+    "name": "백화점/마트",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "jikgu",
+    "name": "해외직구",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "home_shopping",
+    "name": "홈쇼핑",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "online_shopping",
+    "name": "온라인 쇼핑",
+    "type": "gall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "cs_new1",
+    "name": "편의점",
+    "type": "gall",
+    "category": "음식",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "hotdeal1",
+    "name": "핫딜",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "ssallmuk",
+    "name": "쌀먹",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "homeplus",
+    "name": "홈플러스",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "emart",
+    "name": "이마트",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "costco",
+    "name": "코스트코",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "tmon",
+    "name": "티몬",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "cp",
+    "name": "쿠팡",
+    "type": "mgall",
+    "category": "성공/계발",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "muji",
+    "name": "무인양품",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "gbeovhstjdwl",
+    "name": "휴대폰 성지",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "bunjang",
+    "name": "번개장터",
+    "type": "mgall",
+    "category": "생활",
+    "group": "직접 거래"
+  },
+  {
+    "id": "upza",
+    "name": "업자(리셀러)",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "직접 거래"
+  },
+  {
+    "id": "used_car",
+    "name": "중고차",
+    "type": "mgall",
+    "category": "교통/운송",
+    "group": "직접 거래"
+  },
+  {
+    "id": "pridepc_new4",
+    "name": "컴퓨터 본체",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "smartphone",
+    "name": "스마트폰",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "쇼핑/유통"
+  },
+  {
+    "id": "iphone",
+    "name": "아이폰",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "earphone",
+    "name": "이어폰/헤드폰",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "tabletpc",
+    "name": "태블릿PC",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "appliance",
+    "name": "가전",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "etc_g",
+    "name": "디지털카메라",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "audio",
+    "name": "오디오",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "mp3",
+    "name": "MP3P",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "hometheater",
+    "name": "홈씨어터",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "pc_etc",
+    "name": "컴퓨터-주변기기",
+    "type": "gall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "galaxy",
+    "name": "갤럭시",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "macbook",
+    "name": "맥북",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "laptop",
+    "name": "노트북",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "mnt",
+    "name": "모니터",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "mechanicalkeyboard",
+    "name": "기계식키보드",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "newheadphone",
+    "name": "헤드폰",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "headset",
+    "name": "헤드셋",
+    "type": "mgall",
+    "category": "취미",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "gaaaaaaaaaaaaaaa",
+    "name": "가습기",
+    "type": "mgall",
+    "category": "쇼핑/장터",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "filmcamera",
+    "name": "필름카메라",
+    "type": "mgall",
+    "category": "취미",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "andtabcus",
+    "name": "안드로이드 태블릿",
+    "type": "mgall",
+    "category": "디지털/IT",
+    "group": "전자제품/IT"
+  },
+  {
+    "id": "fashion_acc",
+    "name": "안경",
+    "type": "gall",
+    "category": "패션",
+    "group": "패션/뷰티"
+  },
+  {
+    "id": "cosmetic",
+    "name": "향수/화장품",
+    "type": "gall",
+    "category": "패션",
+    "group": "패션/뷰티"
+  },
+  {
+    "id": "footwear",
+    "name": "신발",
+    "type": "gall",
+    "category": "패션",
+    "group": "패션/뷰티"
+  },
+  {
+    "id": "watch",
+    "name": "시계",
+    "type": "gall",
+    "category": "패션",
+    "group": "패션/뷰티"
+  },
+  {
+    "id": "hyang",
+    "name": "향수",
+    "type": "mgall",
+    "category": "패션",
+    "group": "패션/뷰티"
+  },
+  {
+    "id": "car_new1",
+    "name": "자동차",
+    "type": "gall",
+    "category": "교통/운송",
+    "group": "자동차/교통"
+  },
+  {
+    "id": "bicycle",
+    "name": "자전거",
+    "type": "gall",
+    "category": "교통/운송",
+    "group": "자동차/교통"
+  },
+  {
+    "id": "bike",
+    "name": "바이크",
+    "type": "gall",
+    "category": "교통/운송",
+    "group": "자동차/교통"
+  },
+  {
+    "id": "car_diy",
+    "name": "자동차 튜닝",
+    "type": "gall",
+    "category": "교통/운송",
+    "group": "자동차/교통"
+  },
+  {
+    "id": "wjsrlwkwjsrj",
+    "name": "전기자전거",
+    "type": "mgall",
+    "category": "교통/운송",
+    "group": "자동차/교통"
+  }
+]

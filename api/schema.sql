@@ -172,3 +172,44 @@ CREATE INDEX IF NOT EXISTS idx_agent_bids_order ON agent_bids(order_id);
 CREATE INDEX IF NOT EXISTS idx_driver_bids_order ON driver_bids(order_id);
 CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status);
 CREATE INDEX IF NOT EXISTS idx_drivers_area ON drivers(area);
+
+-- 커뮤니티 댓글
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  post_id TEXT NOT NULL,
+  author TEXT,
+  content TEXT NOT NULL,
+  recommendations INTEGER DEFAULT 0,
+  created_at DATETIME,
+  crawled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source, post_id, author, content)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_source ON comments(source);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_comments_crawled ON comments(crawled_at DESC);
+
+-- 상품별 적정가격 가이드 (크롤링 데이터 기반)
+CREATE TABLE IF NOT EXISTS price_guide (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product TEXT NOT NULL UNIQUE,
+  category TEXT,
+  deal_count INTEGER DEFAULT 0,
+  price_avg INTEGER,
+  price_median INTEGER,
+  price_min INTEGER,
+  price_max INTEGER,
+  price_godly INTEGER,
+  price_good INTEGER,
+  price_normal INTEGER,
+  price_expensive INTEGER,
+  avg_rec REAL DEFAULT 0,
+  best_deal_title TEXT,
+  best_deal_price INTEGER,
+  best_deal_rec INTEGER,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_guide_product ON price_guide(product);
+CREATE INDEX IF NOT EXISTS idx_price_guide_category ON price_guide(category);
