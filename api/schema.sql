@@ -213,3 +213,41 @@ CREATE TABLE IF NOT EXISTS price_guide (
 
 CREATE INDEX IF NOT EXISTS idx_price_guide_product ON price_guide(product);
 CREATE INDEX IF NOT EXISTS idx_price_guide_category ON price_guide(category);
+
+-- 셀러 (직접 상품 등록하는 판매자)
+CREATE TABLE IF NOT EXISTS sellers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  business_name TEXT,
+  phone TEXT,
+  status TEXT DEFAULT 'active',
+  verified BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sellers_email ON sellers(email);
+CREATE INDEX IF NOT EXISTS idx_sellers_status ON sellers(status);
+
+-- 셀러 직접 등록 상품 (deals 테이블과 분리)
+CREATE TABLE IF NOT EXISTS seller_products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  seller_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  price INTEGER NOT NULL,
+  original_price INTEGER,
+  image_url TEXT,
+  category TEXT,
+  stock INTEGER DEFAULT -1,
+  status TEXT DEFAULT 'active',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (seller_id) REFERENCES sellers(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_seller_products_seller ON seller_products(seller_id);
+CREATE INDEX IF NOT EXISTS idx_seller_products_status ON seller_products(status);
+CREATE INDEX IF NOT EXISTS idx_seller_products_category ON seller_products(category);
+CREATE INDEX IF NOT EXISTS idx_seller_products_price ON seller_products(price ASC);

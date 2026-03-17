@@ -128,9 +128,54 @@ async function searchDeals(
   params.push(fetchLimit);
 
   const result = await db.prepare(sql).bind(...params).all<DealRow>();
-  const raw = result.results || [];
+  const dealRows = result.results || [];
 
-  // 패턴 3: 시간 감쇠 적용 후 limit
+  // seller_products도 검색 (같은 키워드/가격 조건)
+  const spConditions: string[] = ["status = 'active'"];
+  const spParams: (string | number)[] = [];
+
+  if (keywords.length > 0) {
+    const kc = keywords.map(() => "title LIKE ?");
+    spConditions.push(`(${kc.join(" OR ")})`);
+    for (const kw of keywords) spParams.push(`%${kw}%`);
+  }
+  if (minPrice > 0 && maxPrice > 0) {
+    spConditions.push("price >= ? AND price <= ?");
+    spParams.push(minPrice, maxPrice);
+  } else if (minPrice > 0) {
+    spConditions.push("price >= ?");
+    spParams.push(minPrice);
+  } else if (maxPrice > 0) {
+    spConditions.push("price > 0 AND price <= ?");
+    spParams.push(maxPrice);
+  }
+
+  spParams.push(fetchLimit);
+  const spSql = `SELECT * FROM seller_products WHERE ${spConditions.join(" AND ")} ORDER BY created_at DESC LIMIT ?`;
+  const spResult = await db.prepare(spSql).bind(...spParams).all();
+  const sellerRows = (spResult.results || []) as { id: number; title: string; description: string | null; price: number; original_price: number | null; image_url: string | null; category: string | null; created_at: string; seller_id: number }[];
+
+  // seller_products → DealRow 호환 변환
+  const sellerAsDeal: DealRow[] = sellerRows.map(sp => ({
+    id: sp.id + 1_000_000, // deals id와 충돌 방지
+    title: sp.title,
+    description: sp.description || "",
+    original_price: sp.original_price || sp.price,
+    sale_price: sp.price,
+    discount_rate: sp.original_price ? Math.round((1 - sp.price / sp.original_price) * 100) : 0,
+    url: `/products/${sp.id}`,
+    image_url: sp.image_url || "",
+    category: sp.category || "",
+    source: "seller",
+    source_id: `seller_${sp.seller_id}_${sp.id}`,
+    posted_at: sp.created_at,
+    created_at: sp.created_at,
+    expires_at: "",
+  }));
+
+  const raw = [...dealRows, ...sellerAsDeal];
+
+  // 패턴 3: 시간 감쇠 적용 후 limit (seller 상품도 biz: 부스팅 없지만 동일 랭킹)
   return applyTimeDecay(raw).slice(0, limit);
 }
 

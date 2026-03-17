@@ -5,13 +5,12 @@ import chatRoutes from "./routes/chat";
 import dealRoutes from "./routes/deals";
 import agentRoutes from "./routes/agents";
 import discoveryRoutes from "./routes/discovery";
-import storeRoutes from "./routes/stores";
-import deliveryRoutes from "./routes/delivery";
-import driverRoutes from "./routes/drivers";
 import developerRoutes from "./routes/developers";
 import agentChatRoutes from "./routes/agent-chat";
 import commentRoutes from "./routes/comments";
 import priceGuideRoutes from "./routes/price-guide";
+import sellerRoutes from "./routes/sellers";
+import sellerProductRoutes from "./routes/seller-products";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -23,7 +22,7 @@ app.use("/*", cors({
     if (origin === "http://localhost:3000") return origin;
     return "https://everything-a6h.pages.dev";
   },
-  allowMethods: ["GET", "POST", "PATCH"],
+  allowMethods: ["GET", "POST", "PATCH", "DELETE"],
   allowHeaders: ["Content-Type", "Authorization"],
 }));
 
@@ -32,13 +31,12 @@ app.route("/", chatRoutes);
 app.route("/", dealRoutes);
 app.route("/", agentRoutes);
 app.route("/", discoveryRoutes);
-app.route("/", storeRoutes);
-app.route("/", deliveryRoutes);
-app.route("/", driverRoutes);
 app.route("/", developerRoutes);
 app.route("/", agentChatRoutes);
 app.route("/", commentRoutes);
 app.route("/", priceGuideRoutes);
+app.route("/", sellerRoutes);
+app.route("/", sellerProductRoutes);
 
 // 헬스체크
 app.get("/health", (c) => {

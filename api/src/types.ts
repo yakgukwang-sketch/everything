@@ -4,6 +4,7 @@ export type Bindings = {
   DB: D1Database;
   GEMINI_API_KEY: string;
   ADMIN_API_KEY: string;
+  JWT_SECRET: string;
 };
 
 // ===== DB Row Types =====
@@ -39,50 +40,6 @@ export interface AgentRow {
   created_at: string;
 }
 
-export interface StoreRow {
-  id: number;
-  name: string;
-  address: string;
-  road_address: string;
-  phone: string;
-  category: string;
-  lat: number;
-  lng: number;
-  verified: boolean;
-  menu_info: string;
-  image_url: string;
-  rating: number;
-  review_count: number;
-}
-
-export interface DeliveryOrderRow {
-  id: number;
-  consumer_request: string;
-  area: string;
-  food_type: string;
-  budget: number;
-  quantity: string;
-  status: string;
-  selected_agent_id: number;
-  selected_driver_id: number;
-  final_price: number;
-  store_id: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DriverRow {
-  id: number;
-  name: string;
-  phone: string;
-  area: string;
-  vehicle_type: string;
-  status: string;
-  rating: number;
-  review_count: number;
-  total_deliveries: number;
-  created_at: string;
-}
 
 export interface CommentRow {
   id: number;
@@ -142,16 +99,38 @@ export interface ShoppingContext {
   query: string;
 }
 
-export interface DeliveryContext {
-  budget: number;
-  area: string;
-  foodType: string;
-}
-
 // ===== Domain Agent Type Aliases =====
 
 export type ShoppingAgent = AgentCore<ShoppingContext, DealRow>;
-export type DeliveryAgent = AgentCore<DeliveryContext, StoreRow>;
+
+// ===== Seller Types =====
+
+export interface SellerRow {
+  id: number;
+  email: string;
+  password_hash: string;
+  name: string;
+  business_name: string | null;
+  phone: string | null;
+  status: string;
+  verified: number;
+  created_at: string;
+}
+
+export interface SellerProductRow {
+  id: number;
+  seller_id: number;
+  title: string;
+  description: string | null;
+  price: number;
+  original_price: number | null;
+  image_url: string | null;
+  category: string | null;
+  stock: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // ===== Agent Chat Config =====
 

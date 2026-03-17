@@ -3,14 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  API_URL, Deal, ChatMessage, AgentBid, DriverBid, AgentInfo, MediaCard,
+  API_URL, Deal, ChatMessage, AgentInfo, MediaCard,
   formatPrice, sanitizeUrl,
 } from "@/lib/shared";
-import { detectDelivery, extractArea, extractFoodType, extractBudget, extractQuantity } from "@/lib/delivery-utils";
 import DealFeed from "@/components/DealFeed";
-import DeliveryFlow from "@/components/DeliveryFlow";
-
-type DeliveryBid = AgentBid & { agent_name?: string; store_name?: string };
 
 // 하드코딩된 에이전트 목록 (API 실패 시 폴백)
 const FALLBACK_AGENTS: AgentInfo[] = [
@@ -22,10 +18,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [chatMsgs, setChatMsgs] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
-  const [phase, setPhase] = useState<
-    "idle" | "chatting" | "agent_chat" |
-    "delivery_bids" | "delivery_drivers" | "delivering" | "delivery_review"
-  >("idle");
+  const [phase, setPhase] = useState<"idle" | "chatting" | "agent_chat">("idle");
   const [deals, setDeals] = useState<Deal[]>([]);
   const [feedTab, setFeedTab] = useState<"hot" | "latest">("hot");
   const [feedFilter, setFeedFilter] = useState("all");
@@ -35,21 +28,8 @@ export default function Home() {
   const [activeAgent, setActiveAgent] = useState<AgentInfo | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>(FALLBACK_AGENTS);
 
-  // 배달 state
-  const [deliveryOrderId, setDeliveryOrderId] = useState<number | null>(null);
-  const [deliveryBids, setDeliveryBids] = useState<DeliveryBid[]>([]);
-  const [driverBids, setDriverBids] = useState<DriverBid[]>([]);
-  const [deliveryLoading, setDeliveryLoading] = useState(false);
-
-  // 리뷰
-  const [agentRating, setAgentRating] = useState(5);
-  const [driverRating, setDriverRating] = useState(5);
-  const [foodRating, setFoodRating] = useState(5);
-  const [reviewComment, setReviewComment] = useState("");
-
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
-  const agentSelectingRef = useRef(false);
   const router = useRouter();
 
   // 에이전트 목록 로드
@@ -85,10 +65,10 @@ export default function Home() {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (!chatLoading && !deliveryLoading) {
+    if (!chatLoading) {
       setTimeout(() => chatInputRef.current?.focus(), 100);
     }
-  }, [chatMsgs, deliveryBids, driverBids, chatLoading, deliveryLoading, phase]);
+  }, [chatMsgs, chatLoading, phase]);
 
   // === 에이전트 1:1 채팅 ===
 
@@ -133,189 +113,6 @@ export default function Home() {
     }
   };
 
-  // === 배달 전용 Gemini 대화 (기존 /api/chat) ===
-
-  const sendChat = async (newMsgs: ChatMessage[]) => {
-    setChatLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMsgs }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        const reply = data.reply || "뭐 찾고 있어?";
-        const options = data.options || [];
-        const updated = [...newMsgs, { role: "system" as const, text: reply, options }];
-        setChatMsgs(updated);
-
-        if (data.ready && data.query) {
-          const qType = data.query.type || "";
-
-          if (qType === "delivery") {
-            const food = data.query.food || data.query.product || "";
-            const area = data.query.area || extractArea(newMsgs.map(m => m.text).join(" "));
-            const quantity = data.query.quantity || "1인분";
-            const budget = parseInt(data.query.budget) || 50000;
-            const deliveryQuery = `${area} ${food} ${quantity} ${budget}원`;
-
-            setChatMsgs(prev => [...prev, { role: "system", text: `배달 주문이네! ${area} ${food} ${quantity} — 에이전트들이 경쟁 입찰 중...` }]);
-            sendDeliveryRequest(deliveryQuery);
-          }
-          // 쇼핑은 더 이상 여기서 처리 안 함 — 에이전트 1:1 채팅으로 전환됨
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      setChatMsgs(prev => [...prev, { role: "system", text: "죄송해요, 잠시 문제가 생겼어요. 다시 말씀해주세요!" }]);
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
-  // 배달 주문 생성
-  const sendDeliveryRequest = async (query: string) => {
-    setDeliveryLoading(true);
-    const area = extractArea(query);
-    const foodType = extractFoodType(query);
-    const budget = extractBudget(query);
-    const quantity = extractQuantity(query);
-
-    try {
-      const res = await fetch(`${API_URL}/api/delivery/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consumer_request: query, area, food_type: foodType, budget, quantity }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setDeliveryOrderId(data.order_id);
-        const bids = (data.bids || []).map((b: Record<string, unknown>, i: number) => ({
-          id: b.id || i + 1,
-          order_id: data.order_id,
-          agent_id: b.agent_id,
-          agent_name: b.agent_name,
-          store_name: typeof b.proposed_store === "string" ? b.proposed_store : (b.proposed_store != null && typeof b.proposed_store === "object") ? (b.proposed_store as Record<string, unknown>)?.name || b.store_name || "추천 가게" : b.store_name || "추천 가게",
-          proposed_price: b.proposed_price,
-          delivery_fee: b.delivery_fee,
-          total_price: b.total_price,
-          message: b.message,
-          created_at: new Date().toISOString(),
-        }));
-        if (bids.length === 0) {
-          setChatMsgs(prev => [...prev, { role: "system", text: data.message || "해당 지역에 등록된 가게가 없어요. 다른 지역이나 음식으로 다시 시도해보세요!" }]);
-          setPhase("chatting");
-        } else {
-          setDeliveryBids(bids);
-          setPhase("delivery_bids");
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeliveryLoading(false);
-    }
-  };
-
-  // 에이전트 선택 (배달)
-  const handleSelectDeliveryAgent = async (bidId: number) => {
-    if (!deliveryOrderId || deliveryLoading) return;
-    if (phase !== "delivery_bids") return;
-    if (agentSelectingRef.current) return;
-    agentSelectingRef.current = true;
-    setDeliveryLoading(true);
-    setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택하는 중..." }]);
-    try {
-      const res = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/select-agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_bid_id: bidId }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const orderRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}`);
-        const orderData = await orderRes.json();
-        setDriverBids(orderData.data?.driver_bids || []);
-        setPhase("delivery_drivers");
-        setChatMsgs(prev => [...prev, { role: "system", text: "에이전트를 선택했어요! 기사님을 찾고 있어요..." }]);
-      } else {
-        setChatMsgs(prev => [...prev, { role: "system", text: data.error || "에이전트 선택에 실패했어요. 다시 시도해주세요." }]);
-      }
-    } catch (err) {
-      console.error(err);
-      setChatMsgs(prev => [...prev, { role: "system", text: "네트워크 오류가 발생했어요. 다시 시도해주세요." }]);
-    } finally {
-      setDeliveryLoading(false);
-      agentSelectingRef.current = false;
-    }
-  };
-
-  // 기사 수락
-  const handleAcceptDriver = async (bidId: number) => {
-    if (!deliveryOrderId) return;
-    setDeliveryLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/accept-driver`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driver_bid_id: bidId }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setChatMsgs(prev => [...prev, { role: "system", text: "기사님이 배달을 시작했어요! 🛵" }]);
-        setPhase("delivering");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeliveryLoading(false);
-    }
-  };
-
-  // 배달 완료 + 리뷰
-  const handleDeliveryReview = async () => {
-    if (!deliveryOrderId) return;
-    try {
-      const completeRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const completeData = await completeRes.json();
-      if (!completeData.success) {
-        setChatMsgs(prev => [...prev, { role: "system", text: "배달 완료 처리에 실패했어요. 다시 시도해주세요." }]);
-        return;
-      }
-      const reviewRes = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_rating: agentRating, driver_rating: driverRating, food_rating: foodRating, comment: reviewComment }),
-      });
-      const reviewData = await reviewRes.json();
-      if (reviewData.success) {
-        setChatMsgs(prev => [...prev, { role: "system", text: "평가 완료! 감사합니다" }]);
-      } else {
-        setChatMsgs(prev => [...prev, { role: "system", text: "배달은 완료됐지만 평가 저장에 실패했어요." }]);
-      }
-      setPhase("delivery_review");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // 기사 새로고침
-  const refreshDriverBids = async () => {
-    if (!deliveryOrderId) return;
-    try {
-      const res = await fetch(`${API_URL}/api/delivery/${deliveryOrderId}`);
-      const data = await res.json();
-      setDriverBids(data.data?.driver_bids || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // 유저 입력
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,14 +131,8 @@ export default function Home() {
     const newMsgs = [...chatMsgs, { role: "user" as const, text }];
     setChatMsgs(newMsgs);
 
-    if (phase === "idle" || phase === "delivery_review") {
-      // 배달 키워드 감지하면 배달 플로우
-      if (detectDelivery(text)) {
-        setPhase("chatting");
-        sendChat(newMsgs);
-        return;
-      }
-      // 그 외 쇼핑 → 감자 에이전트로 바로 연결
+    if (phase === "idle") {
+      // 쇼핑 → 감자 에이전트로 바로 연결
       const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
       setActiveAgent(gamja);
       setPhase("agent_chat");
@@ -353,10 +144,6 @@ export default function Home() {
       sendToAgent(agentMsgs, gamja);
       return;
     }
-
-    if (phase === "chatting") {
-      sendChat(newMsgs);
-    }
   };
 
   // 선택지 클릭
@@ -364,11 +151,7 @@ export default function Home() {
     if (chatLoading) return;
     const newMsgs = [...chatMsgs, { role: "user" as const, text: option }];
     setChatMsgs(newMsgs);
-    if (phase === "agent_chat") {
-      sendToAgent(newMsgs);
-    } else {
-      sendChat(newMsgs);
-    }
+    sendToAgent(newMsgs);
   };
 
   // 새 대화
@@ -376,15 +159,7 @@ export default function Home() {
     setChatMsgs([]);
     setPhase("idle");
     setActiveAgent(null);
-    setDeliveryBids([]);
-    setDriverBids([]);
-    setDeliveryOrderId(null);
     setChatLoading(false);
-    setDeliveryLoading(false);
-    setAgentRating(5);
-    setDriverRating(5);
-    setFoodRating(5);
-    setReviewComment("");
   };
 
   // 미디어 카드 렌더러
@@ -429,8 +204,8 @@ export default function Home() {
     <div className="main">
       <header className="header">
         <span className="header-link" onClick={() => router.push("/agents")} style={{ cursor: "pointer" }}>에이전트</span>
-        <span className="header-link" onClick={() => router.push("/driver")} style={{ cursor: "pointer" }}>기사</span>
         <span className="header-link" onClick={() => router.push("/submit")} style={{ cursor: "pointer" }}>상품 등록</span>
+        <span className="header-link" onClick={() => router.push("/seller/login")} style={{ cursor: "pointer" }}>셀러</span>
       </header>
 
       {phase === "idle" ? (
@@ -483,28 +258,20 @@ export default function Home() {
           <div className="quick-examples">
             {[
               "노트북 추천해줘",
-              "부천 제육볶음 4인분 4만원",
-              "치킨 2마리 시켜줘",
               "이어폰 사고싶어",
+              "가성비 키보드",
+              "선물 추천",
             ].map(ex => (
               <button key={ex} className="example-chip" onClick={() => {
-                if (detectDelivery(ex)) {
-                  const msgs = [{ role: "user" as const, text: ex }];
-                  setChatMsgs(msgs);
-                  setPhase("chatting");
-                  sendChat(msgs);
-                } else {
-                  // 쇼핑 → 감자 에이전트
-                  const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
-                  setActiveAgent(gamja);
-                  setPhase("agent_chat");
-                  const agentMsgs: ChatMessage[] = [
-                    { role: "system", text: gamja.greeting },
-                    { role: "user", text: ex },
-                  ];
-                  setChatMsgs(agentMsgs);
-                  sendToAgent(agentMsgs, gamja);
-                }
+                const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
+                setActiveAgent(gamja);
+                setPhase("agent_chat");
+                const agentMsgs: ChatMessage[] = [
+                  { role: "system", text: gamja.greeting },
+                  { role: "user", text: ex },
+                ];
+                setChatMsgs(agentMsgs);
+                sendToAgent(agentMsgs, gamja);
               }}>
                 {ex}
               </button>
@@ -612,7 +379,7 @@ export default function Home() {
               </div>
             ))}
 
-            {(chatLoading || deliveryLoading) && (
+            {chatLoading && (
               <div className="chat-msg system">
                 <div className="chat-bot-icon">{botIcon}</div>
                 <div className="chat-bubble system">
@@ -623,52 +390,26 @@ export default function Home() {
               </div>
             )}
 
-            {/* 배달 플로우 */}
-            <DeliveryFlow
-              phase={phase}
-              deliveryOrderId={deliveryOrderId}
-              deliveryBids={deliveryBids}
-              driverBids={driverBids}
-              agentRating={agentRating}
-              driverRating={driverRating}
-              foodRating={foodRating}
-              reviewComment={reviewComment}
-              onSelectAgent={handleSelectDeliveryAgent}
-              onAcceptDriver={handleAcceptDriver}
-              onRefreshDrivers={refreshDriverBids}
-              onDeliveryReview={handleDeliveryReview}
-              onSetPhase={(p) => setPhase(p as typeof phase)}
-              onSetAgentRating={setAgentRating}
-              onSetDriverRating={setDriverRating}
-              onSetFoodRating={setFoodRating}
-              onSetReviewComment={setReviewComment}
-              onAddChatMsg={(msg) => setChatMsgs(prev => [...prev, msg])}
-            />
-
             <div ref={chatEndRef} />
           </div>
 
           {/* 입력창 */}
-          {!["delivering"].includes(phase) && (
-            <form className="chat-input-form" onSubmit={handleSubmit}>
-              <input
-                ref={chatInputRef}
-                className="chat-input"
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={
-                  phase === "agent_chat" && activeAgent ? `${activeAgent.name}에게 말하기...` :
-                  phase === "delivery_bids" ? "에이전트를 선택하거나 추가 질문..." :
-                  phase === "delivery_drivers" ? "기사를 선택하거나 추가 질문..." :
-                  "답변을 입력하세요..."
-                }
-                autoFocus
-                disabled={chatLoading || deliveryLoading}
-              />
-              <button type="submit" className="chat-send-btn" disabled={chatLoading || deliveryLoading}>전송</button>
-            </form>
-          )}
+          <form className="chat-input-form" onSubmit={handleSubmit}>
+            <input
+              ref={chatInputRef}
+              className="chat-input"
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={
+                phase === "agent_chat" && activeAgent ? `${activeAgent.name}에게 말하기...` :
+                "답변을 입력하세요..."
+              }
+              autoFocus
+              disabled={chatLoading}
+            />
+            <button type="submit" className="chat-send-btn" disabled={chatLoading}>전송</button>
+          </form>
         </div>
       )}
 
