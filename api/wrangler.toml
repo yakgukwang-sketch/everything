@@ -13,5 +13,9 @@ type = "Text"
 globs = ["**/*.md"]
 fallthrough = false
 
+[[r2_buckets]]
+bucket_name = "everything-images"
+binding = "IMAGES"
+
 # GEMINI_API_KEY는 wrangler secret put GEMINI_API_KEY 로 설정
 # ADMIN_API_KEY는 wrangler secret put ADMIN_API_KEY 로 설정

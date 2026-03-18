@@ -19,13 +19,13 @@ def run():
     all_comments = []
 
     for i, (name, deal_crawler, comment_crawler) in enumerate(CRAWLERS, 1):
-        print(f"\n[{i}/{len(CRAWLERS)}] {name} — 게시글 수집...")
+        print(f"\n[{i}/{len(CRAWLERS)}] {name} - 게시글 수집...")
         try:
             deals = deal_crawler()
             all_deals.extend(deals)
 
             # 댓글 수집
-            print(f"[{i}/{len(CRAWLERS)}] {name} — 댓글 수집...")
+            print(f"[{i}/{len(CRAWLERS)}] {name} - 댓글 수집...")
             comments = comment_crawler(deals)
             all_comments.extend(comments)
         except Exception as e:

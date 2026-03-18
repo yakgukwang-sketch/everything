@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CATEGORIES, formatPrice } from "@/lib/shared";
 import type { SellerProduct } from "@/lib/shared";
-import { getToken, getSeller, clearAuth, fetchWithAuth } from "@/lib/auth";
+import { getToken, getSeller, clearAuth, fetchWithAuth, uploadImage } from "@/lib/auth";
 import type { SellerInfo } from "@/lib/auth";
 
-type Tab = "products" | "add";
+type Tab = "products" | "add" | "edit";
 
 export default function SellerDashboardPage() {
   const router = useRouter();
@@ -15,6 +15,7 @@ export default function SellerDashboardPage() {
   const [tab, setTab] = useState<Tab>("products");
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingProduct, setEditingProduct] = useState<SellerProduct | null>(null);
 
   // Product form
   const [form, setForm] = useState({
@@ -22,6 +23,7 @@ export default function SellerDashboardPage() {
     image_url: "", category: "", stock: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const loadProducts = useCallback(async () => {
@@ -50,6 +52,24 @@ export default function SellerDashboardPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadImage(file);
+      if (result.success && result.url) {
+        setForm(f => ({ ...f, image_url: result.url! }));
+      } else {
+        setMessage({ ok: false, text: result.error || "업로드 실패" });
+      }
+    } catch {
+      setMessage({ ok: false, text: "이미지 업로드에 실패했습니다" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -73,6 +93,57 @@ export default function SellerDashboardPage() {
       if (data.success) {
         setMessage({ ok: true, text: "상품이 등록되었습니다!" });
         setForm({ title: "", description: "", price: "", original_price: "", image_url: "", category: "", stock: "" });
+        await loadProducts();
+        setTab("products");
+      } else {
+        setMessage({ ok: false, text: data.error });
+      }
+    } catch {
+      setMessage({ ok: false, text: "서버 연결에 실패했습니다" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (p: SellerProduct) => {
+    setEditingProduct(p);
+    setForm({
+      title: p.title,
+      description: p.description || "",
+      price: String(p.price),
+      original_price: p.original_price ? String(p.original_price) : "",
+      image_url: p.image_url || "",
+      category: p.category || "",
+      stock: p.stock >= 0 ? String(p.stock) : "",
+    });
+    setMessage(null);
+    setTab("edit");
+  };
+
+  const handleEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetchWithAuth(`/api/seller/products/${editingProduct.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: form.title,
+          description: form.description || null,
+          price: Number(form.price),
+          original_price: form.original_price ? Number(form.original_price) : null,
+          image_url: form.image_url || null,
+          category: form.category || null,
+          stock: form.stock ? Number(form.stock) : -1,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setMessage({ ok: true, text: "상품이 수정되었습니다!" });
+        setEditingProduct(null);
         await loadProducts();
         setTab("products");
       } else {
@@ -148,7 +219,7 @@ export default function SellerDashboardPage() {
           {(["products", "add"] as Tab[]).map(t => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => { setTab(t); setEditingProduct(null); }}
               style={{
                 padding: "10px 20px", fontSize: 14, fontWeight: tab === t ? 600 : 400,
                 border: "none", background: "none", cursor: "pointer",
@@ -160,6 +231,17 @@ export default function SellerDashboardPage() {
               {t === "products" ? `내 상품 (${products.length})` : "상품 등록"}
             </button>
           ))}
+          {tab === "edit" && (
+            <button
+              style={{
+                padding: "10px 20px", fontSize: 14, fontWeight: 600,
+                border: "none", background: "none", cursor: "default",
+                borderBottom: "2px solid #fbbc05", color: "#fbbc05", marginBottom: -2,
+              }}
+            >
+              상품 수정
+            </button>
+          )}
         </div>
 
         {/* Product List */}
@@ -221,16 +303,28 @@ export default function SellerDashboardPage() {
                         {p.stock >= 0 && <span style={{ marginLeft: 8 }}>재고 {p.stock}</span>}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteProduct(p.id)}
-                      style={{
-                        padding: "6px 12px", fontSize: 12, color: "#ea4335",
-                        background: "none", border: "1px solid #ea4335",
-                        borderRadius: 6, cursor: "pointer", flexShrink: 0,
-                      }}
-                    >
-                      삭제
-                    </button>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleStartEdit(p)}
+                        style={{
+                          padding: "6px 12px", fontSize: 12, color: "#1a73e8",
+                          background: "none", border: "1px solid #1a73e8",
+                          borderRadius: 6, cursor: "pointer",
+                        }}
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        style={{
+                          padding: "6px 12px", fontSize: 12, color: "#ea4335",
+                          background: "none", border: "1px solid #ea4335",
+                          borderRadius: 6, cursor: "pointer",
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -269,8 +363,19 @@ export default function SellerDashboardPage() {
             )}
 
             <div className="submit-field">
-              <label className="submit-label">상품 이미지 URL</label>
-              <input className="submit-input" name="image_url" type="url" value={form.image_url} onChange={handleChange} placeholder="https://..." />
+              <label className="submit-label">상품 이미지</label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input className="submit-input" name="image_url" type="url" value={form.image_url} onChange={handleChange} placeholder="URL 직접 입력 또는 파일 업로드" style={{ flex: 1 }} />
+                <label style={{
+                  padding: "8px 16px", fontSize: 13, fontWeight: 500,
+                  color: "#fff", background: uploading ? "#9aa0a6" : "#34a853",
+                  borderRadius: 8, cursor: uploading ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap", flexShrink: 0,
+                }}>
+                  {uploading ? "업로드중..." : "파일 선택"}
+                  <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} style={{ display: "none" }} />
+                </label>
+              </div>
               {form.image_url && (
                 <div style={{ marginTop: 8 }}>
                   <img
@@ -307,6 +412,100 @@ export default function SellerDashboardPage() {
               }}
             >
               {submitting ? "등록 중..." : "상품 등록하기"}
+            </button>
+          </form>
+        )}
+
+        {/* Edit Product Form */}
+        {tab === "edit" && editingProduct && (
+          <form onSubmit={handleEditProduct}>
+            <div style={{ fontSize: 13, color: "#5f6368", marginBottom: 16 }}>
+              상품 #{editingProduct.id} 수정 중
+              <span
+                onClick={() => { setTab("products"); setEditingProduct(null); }}
+                style={{ marginLeft: 12, color: "#1a73e8", cursor: "pointer" }}
+              >
+                취소
+              </span>
+            </div>
+
+            <div className="submit-field">
+              <label className="submit-label">상품명 <span className="submit-required">*</span></label>
+              <input className="submit-input" name="title" value={form.title} onChange={handleChange} placeholder="예: 삼성 갤럭시 버즈3 프로" required />
+            </div>
+
+            <div className="submit-field">
+              <label className="submit-label">상품 설명</label>
+              <textarea className="submit-textarea" name="description" value={form.description} onChange={handleChange} placeholder="상품 설명" rows={3} />
+            </div>
+
+            <div style={{ display: "flex", gap: 16 }}>
+              <div className="submit-field" style={{ flex: 1 }}>
+                <label className="submit-label">판매가 (원) <span className="submit-required">*</span></label>
+                <input className="submit-input" name="price" type="number" min="1" value={form.price} onChange={handleChange} placeholder="0" required />
+              </div>
+              <div className="submit-field" style={{ flex: 1 }}>
+                <label className="submit-label">정가 (원)</label>
+                <input className="submit-input" name="original_price" type="number" min="0" value={form.original_price} onChange={handleChange} placeholder="0 (선택)" />
+              </div>
+            </div>
+
+            {discountRate > 0 && (
+              <div style={{ fontSize: 14, color: "#ea4335", fontWeight: 600, marginBottom: 16 }}>
+                {discountRate}% 할인
+              </div>
+            )}
+
+            <div className="submit-field">
+              <label className="submit-label">상품 이미지</label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input className="submit-input" name="image_url" type="url" value={form.image_url} onChange={handleChange} placeholder="URL 직접 입력 또는 파일 업로드" style={{ flex: 1 }} />
+                <label style={{
+                  padding: "8px 16px", fontSize: 13, fontWeight: 500,
+                  color: "#fff", background: uploading ? "#9aa0a6" : "#34a853",
+                  borderRadius: 8, cursor: uploading ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap", flexShrink: 0,
+                }}>
+                  {uploading ? "업로드중..." : "파일 선택"}
+                  <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} style={{ display: "none" }} />
+                </label>
+              </div>
+              {form.image_url && (
+                <div style={{ marginTop: 8 }}>
+                  <img
+                    src={form.image_url} alt="미리보기"
+                    style={{ maxWidth: 200, maxHeight: 200, borderRadius: 8, border: "1px solid #e0e0e0" }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 16 }}>
+              <div className="submit-field" style={{ flex: 1 }}>
+                <label className="submit-label">카테고리</label>
+                <select className="submit-input" name="category" value={form.category} onChange={handleChange}>
+                  <option value="">선택해주세요</option>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="submit-field" style={{ flex: 1 }}>
+                <label className="submit-label">재고</label>
+                <input className="submit-input" name="stock" type="number" min="-1" value={form.stock} onChange={handleChange} placeholder="-1 (무제한)" />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                width: "100%", padding: "14px", fontSize: 16, fontWeight: 600,
+                color: "#fff", background: submitting ? "#9aa0a6" : "#fbbc05",
+                border: "none", borderRadius: 12, cursor: submitting ? "not-allowed" : "pointer",
+                marginTop: 8,
+              }}
+            >
+              {submitting ? "수정 중..." : "상품 수정하기"}
             </button>
           </form>
         )}

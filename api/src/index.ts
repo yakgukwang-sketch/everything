@@ -11,6 +11,8 @@ import commentRoutes from "./routes/comments";
 import priceGuideRoutes from "./routes/price-guide";
 import sellerRoutes from "./routes/sellers";
 import sellerProductRoutes from "./routes/seller-products";
+import imageRoutes from "./routes/images";
+import orderRoutes from "./routes/orders";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -37,6 +39,8 @@ app.route("/", commentRoutes);
 app.route("/", priceGuideRoutes);
 app.route("/", sellerRoutes);
 app.route("/", sellerProductRoutes);
+app.route("/", imageRoutes);
+app.route("/", orderRoutes);
 
 // 헬스체크
 app.get("/health", (c) => {

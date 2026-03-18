@@ -251,3 +251,40 @@ CREATE INDEX IF NOT EXISTS idx_seller_products_seller ON seller_products(seller_
 CREATE INDEX IF NOT EXISTS idx_seller_products_status ON seller_products(status);
 CREATE INDEX IF NOT EXISTS idx_seller_products_category ON seller_products(category);
 CREATE INDEX IF NOT EXISTS idx_seller_products_price ON seller_products(price ASC);
+
+-- 주문 (소비자 → 셀러 상품, 에이전트 경유)
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_number TEXT NOT NULL UNIQUE,
+  product_id INTEGER NOT NULL,
+  seller_id INTEGER NOT NULL,
+  agent_id TEXT,
+
+  -- 소비자 정보
+  buyer_name TEXT NOT NULL,
+  buyer_phone TEXT NOT NULL,
+  buyer_email TEXT,
+  buyer_address TEXT,
+
+  -- 가격 구조
+  product_price INTEGER NOT NULL,
+  agent_fee INTEGER DEFAULT 0,
+  total_price INTEGER NOT NULL,
+
+  -- 상태: pending → paid → confirmed → shipped → delivered → completed / cancelled / refunded
+  status TEXT DEFAULT 'pending',
+  payment_method TEXT,
+  paid_at DATETIME,
+
+  memo TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES seller_products(id),
+  FOREIGN KEY (seller_id) REFERENCES sellers(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_number ON orders(order_number);
+CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_id);
+CREATE INDEX IF NOT EXISTS idx_orders_agent ON orders(agent_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at DESC);

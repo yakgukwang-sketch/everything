@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Bindings, DealRow, AgentChatConfig } from "../types";
+import type { Bindings, DealRow, AgentChatConfig, PriceGuideRow } from "../types";
 import { callLLM, PROVIDERS, type LLMProvider, type LLMMessage } from "../llm";
 
 // ===== 패턴 2: 스킬 마크다운 임포트 (OpenClaw SKILL.md 패턴) =====
@@ -179,6 +179,64 @@ async function searchDeals(
   return applyTimeDecay(raw).slice(0, limit);
 }
 
+// ===== 가격 등급 판정 (price_guide 연동) =====
+
+function rateDeal(guide: PriceGuideRow, price: number): string {
+  if (price <= guide.price_godly) return "🔥역대급 꿀딜";
+  if (price <= guide.price_good) return "🍯꿀딜";
+  if (price <= guide.price_avg) return "👍괜찮음";
+  if (price <= guide.price_normal) return "😐보통";
+  if (price <= guide.price_expensive) return "💸비쌈";
+  return "🚫바가지";
+}
+
+async function enrichWithPriceGuide(
+  db: D1Database,
+  deals: DealRow[],
+): Promise<{ deal: DealRow; priceRating?: string; guideInfo?: string }[]> {
+  if (deals.length === 0) return [];
+
+  // 각 상품 title에서 핵심 키워드 추출하여 price_guide 매칭
+  const enriched: { deal: DealRow; priceRating?: string; guideInfo?: string }[] = [];
+
+  for (const deal of deals) {
+    if (!deal.sale_price || deal.sale_price <= 0) {
+      enriched.push({ deal });
+      continue;
+    }
+
+    // title에서 핵심 단어로 price_guide LIKE 검색
+    const titleWords = deal.title
+      .replace(/\[.*?\]/g, "")
+      .replace(/\(.*?\)/g, "")
+      .trim()
+      .split(/\s+/)
+      .filter(w => w.length >= 2)
+      .slice(0, 3);
+
+    let guide: PriceGuideRow | null = null;
+    for (const word of titleWords) {
+      const result = await db.prepare(
+        "SELECT * FROM price_guide WHERE product LIKE ? ORDER BY deal_count DESC LIMIT 1"
+      ).bind(`%${word}%`).first<PriceGuideRow>();
+      if (result) {
+        guide = result;
+        break;
+      }
+    }
+
+    if (guide) {
+      const rating = rateDeal(guide, deal.sale_price);
+      const guideInfo = `${rating} (적정가 ~${guide.price_avg.toLocaleString()}원, 꿀딜기준 ${guide.price_good.toLocaleString()}원 이하)`;
+      enriched.push({ deal, priceRating: rating, guideInfo });
+    } else {
+      enriched.push({ deal });
+    }
+  }
+
+  return enriched;
+}
+
 // ===== 응답 파싱 =====
 
 function parseAgentResponse(raw: string) {
@@ -278,11 +336,17 @@ app.post("/api/agent/chat", async (c) => {
         });
       }
 
-      const dealList = deals.slice(0, 10).map((d, i) =>
-        `[${i}] ${d.title} — ${d.sale_price > 0 ? d.sale_price.toLocaleString() + "원" : "가격미정"} (${d.source}, 할인${d.discount_rate || 0}%)`
-      ).join("\n");
+      // price_guide 매칭하여 가격 등급 정보 추가
+      const enrichedDeals = await enrichWithPriceGuide(c.env.DB, deals.slice(0, 10));
 
-      const searchResultMsg = `검색 결과 (${deals.length}건, ${agent.searchSort} 정렬):\n${dealList}\n\n이 중에서 추천해줘. [RECOMMEND] 형식으로.`;
+      const dealList = enrichedDeals.map((ed, i) => {
+        const d = ed.deal;
+        const priceStr = d.sale_price > 0 ? d.sale_price.toLocaleString() + "원" : "가격미정";
+        const priceTag = ed.priceRating ? ` [${ed.guideInfo}]` : "";
+        return `[${i}] ${d.title} — ${priceStr} (${d.source}, 할인${d.discount_rate || 0}%)${priceTag}`;
+      }).join("\n");
+
+      const searchResultMsg = `검색 결과 (${deals.length}건, ${agent.searchSort} 정렬):\n${dealList}\n\n이 중에서 추천해줘. [RECOMMEND] 형식으로. 가격 등급이 있는 상품은 등급 정보를 코멘트에 포함해줘.`;
 
       const secondMessages: LLMMessage[] = [
         ...llmMessages,
@@ -294,14 +358,19 @@ app.post("/api/agent/chat", async (c) => {
       const parsed2 = parseAgentResponse(rawReply2);
 
       const recs = (parsed2.recommendations || []).slice(0, 5).map(r => {
-        const deal = deals[r.dealIndex];
-        if (!deal) return null;
-        return { deal, comment: r.comment };
+        const ed = enrichedDeals[r.dealIndex];
+        if (!ed) return null;
+        return {
+          deal: ed.deal,
+          comment: r.comment,
+          ...(ed.priceRating && { priceRating: ed.priceRating }),
+        };
       }).filter(Boolean);
 
-      const finalRecs = recs.length > 0 ? recs : deals.slice(0, 3).map(d => ({
-        deal: d,
+      const finalRecs = recs.length > 0 ? recs : enrichedDeals.slice(0, 3).map(ed => ({
+        deal: ed.deal,
         comment: "",
+        ...(ed.priceRating && { priceRating: ed.priceRating }),
       }));
 
       const combinedMedia = [...(parsed.media || []), ...(parsed2.media || [])];

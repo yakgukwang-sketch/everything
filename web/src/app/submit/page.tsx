@@ -87,6 +87,26 @@ export default function SubmitPage() {
       </header>
 
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 20px" }}>
+        {/* 셀러 계정 배너 */}
+        <div
+          onClick={() => router.push("/seller/register")}
+          style={{
+            display: "flex", alignItems: "center", gap: 16,
+            padding: "16px 20px", marginBottom: 24,
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            borderRadius: 12, cursor: "pointer", color: "#fff",
+          }}
+        >
+          <div style={{ fontSize: 32 }}>🏪</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>셀러 계정 만들기</div>
+            <div style={{ fontSize: 13, opacity: 0.9 }}>
+              계정을 만들면 상품 관리, 수정, 통계를 한곳에서! AI 에이전트가 소비자에게 추천해드려요.
+            </div>
+          </div>
+          <div style={{ fontSize: 20, opacity: 0.8 }}>→</div>
+        </div>
+
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>상품 직접 등록</h1>
         <p style={{ fontSize: 14, color: "#5f6368", marginBottom: 32 }}>
           사업자/판매자가 직접 할인 상품을 등록할 수 있습니다. 등록된 상품은 AI 에이전트가 소비자에게 추천합니다.

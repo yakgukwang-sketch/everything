@@ -2,6 +2,7 @@
 
 export type Bindings = {
   DB: D1Database;
+  IMAGES: R2Bucket;
   GEMINI_API_KEY: string;
   ADMIN_API_KEY: string;
   JWT_SECRET: string;
@@ -128,6 +129,27 @@ export interface SellerProductRow {
   category: string | null;
   stock: number;
   status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderRow {
+  id: number;
+  order_number: string;
+  product_id: number;
+  seller_id: number;
+  agent_id: string | null;
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_email: string | null;
+  buyer_address: string | null;
+  product_price: number;
+  agent_fee: number;
+  total_price: number;
+  status: string;
+  payment_method: string | null;
+  paid_at: string | null;
+  memo: string | null;
   created_at: string;
   updated_at: string;
 }

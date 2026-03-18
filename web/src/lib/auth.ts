@@ -43,3 +43,16 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}) {
     },
   });
 }
+
+export async function uploadImage(file: File): Promise<{ success: boolean; url?: string; error?: string }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}/api/images/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  return res.json();
+}
