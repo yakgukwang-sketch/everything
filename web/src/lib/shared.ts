@@ -138,6 +138,50 @@ export type SellerProduct = {
   business_name?: string;
 };
 
+// === Order Types ===
+
+export type Order = {
+  id: number;
+  order_number: string;
+  product_id: number;
+  seller_id: number;
+  agent_id: string | null;
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_email: string | null;
+  buyer_address: string | null;
+  product_price: number;
+  agent_fee: number;
+  total_price: number;
+  status: string;
+  payment_method: string | null;
+  paid_at: string | null;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+  product_title?: string;
+  product_image?: string | null;
+};
+
+export const ORDER_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  pending:   { label: "주문접수", color: "#e37400", bg: "#fef7e0" },
+  paid:      { label: "결제완료", color: "#1a73e8", bg: "#e8f0fe" },
+  confirmed: { label: "확인완료", color: "#137333", bg: "#e6f4ea" },
+  shipped:   { label: "배송중",   color: "#9334e6", bg: "#f3e8fd" },
+  delivered: { label: "배송완료", color: "#137333", bg: "#e6f4ea" },
+  completed: { label: "거래완료", color: "#5f6368", bg: "#f1f3f4" },
+  cancelled: { label: "취소",     color: "#c5221f", bg: "#fce8e6" },
+  refunded:  { label: "환불",     color: "#c5221f", bg: "#fce8e6" },
+};
+
+export const ORDER_TRANSITIONS: Record<string, { status: string; label: string; color: string }[]> = {
+  pending:   [{ status: "confirmed", label: "주문 확인", color: "#137333" }, { status: "cancelled", label: "취소", color: "#c5221f" }],
+  paid:      [{ status: "confirmed", label: "주문 확인", color: "#137333" }, { status: "cancelled", label: "취소", color: "#c5221f" }, { status: "refunded", label: "환불", color: "#c5221f" }],
+  confirmed: [{ status: "shipped", label: "배송 시작", color: "#9334e6" }, { status: "cancelled", label: "취소", color: "#c5221f" }],
+  shipped:   [{ status: "delivered", label: "배송 완료", color: "#137333" }],
+  delivered: [{ status: "completed", label: "거래 완료", color: "#5f6368" }],
+};
+
 // === Utils ===
 
 export function formatPrice(price: number): string {

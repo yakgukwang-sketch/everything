@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CATEGORIES, formatPrice } from "@/lib/shared";
-import type { SellerProduct } from "@/lib/shared";
+import { CATEGORIES, formatPrice, ORDER_STATUS, ORDER_TRANSITIONS, timeAgo } from "@/lib/shared";
+import type { SellerProduct, Order } from "@/lib/shared";
 import { getToken, getSeller, clearAuth, fetchWithAuth, uploadImage } from "@/lib/auth";
 import type { SellerInfo } from "@/lib/auth";
 
-type Tab = "products" | "add" | "edit";
+type Tab = "products" | "add" | "edit" | "orders";
 
 export default function SellerDashboardPage() {
   const router = useRouter();
@@ -16,6 +16,9 @@ export default function SellerDashboardPage() {
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<SellerProduct | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderFilter, setOrderFilter] = useState<string>("");
 
   // Product form
   const [form, setForm] = useState({
@@ -31,6 +34,29 @@ export default function SellerDashboardPage() {
     const data = await res.json();
     if (data.success) setProducts(data.products);
   }, []);
+
+  const loadOrders = useCallback(async (status?: string) => {
+    setOrdersLoading(true);
+    const qs = status ? `?status=${status}` : "";
+    const res = await fetchWithAuth(`/api/seller/orders${qs}`);
+    const data = await res.json();
+    if (data.success) setOrders(data.orders);
+    setOrdersLoading(false);
+  }, []);
+
+  const handleOrderStatus = async (orderId: number, newStatus: string) => {
+    const res = await fetchWithAuth(`/api/seller/orders/${orderId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, updated_at: new Date().toISOString() } : o));
+      setMessage({ ok: true, text: `주문 상태가 '${ORDER_STATUS[newStatus]?.label || newStatus}'(으)로 변경되었습니다` });
+    } else {
+      setMessage({ ok: false, text: data.error });
+    }
+  };
 
   useEffect(() => {
     const token = getToken();
@@ -216,10 +242,14 @@ export default function SellerDashboardPage() {
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: "2px solid #e0e0e0" }}>
-          {(["products", "add"] as Tab[]).map(t => (
+          {(["products", "orders", "add"] as Tab[]).map(t => (
             <button
               key={t}
-              onClick={() => { setTab(t); setEditingProduct(null); }}
+              onClick={() => {
+                setTab(t);
+                setEditingProduct(null);
+                if (t === "orders") loadOrders(orderFilter || undefined);
+              }}
               style={{
                 padding: "10px 20px", fontSize: 14, fontWeight: tab === t ? 600 : 400,
                 border: "none", background: "none", cursor: "pointer",
@@ -228,7 +258,7 @@ export default function SellerDashboardPage() {
                 marginBottom: -2,
               }}
             >
-              {t === "products" ? `내 상품 (${products.length})` : "상품 등록"}
+              {t === "products" ? `내 상품 (${products.length})` : t === "orders" ? "주문 관리" : "상품 등록"}
             </button>
           ))}
           {tab === "edit" && (
@@ -327,6 +357,123 @@ export default function SellerDashboardPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Orders Tab */}
+        {tab === "orders" && (
+          <div>
+            {/* Status filter */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+              {[
+                { value: "", label: "전체" },
+                { value: "pending", label: "주문접수" },
+                { value: "confirmed", label: "확인완료" },
+                { value: "shipped", label: "배송중" },
+                { value: "delivered", label: "배송완료" },
+                { value: "completed", label: "거래완료" },
+              ].map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => { setOrderFilter(f.value); loadOrders(f.value || undefined); }}
+                  style={{
+                    padding: "6px 14px", fontSize: 13, borderRadius: 20,
+                    border: orderFilter === f.value ? "1px solid #1a73e8" : "1px solid #dadce0",
+                    background: orderFilter === f.value ? "#e8f0fe" : "#fff",
+                    color: orderFilter === f.value ? "#1a73e8" : "#5f6368",
+                    cursor: "pointer", fontWeight: orderFilter === f.value ? 600 : 400,
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {ordersLoading ? (
+              <div style={{ textAlign: "center", padding: 48, color: "#5f6368" }}>로딩 중...</div>
+            ) : orders.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 48, color: "#5f6368" }}>
+                {orderFilter ? "해당 상태의 주문이 없습니다" : "아직 주문이 없습니다"}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {orders.map(o => {
+                  const st = ORDER_STATUS[o.status] || { label: o.status, color: "#5f6368", bg: "#f1f3f4" };
+                  const transitions = ORDER_TRANSITIONS[o.status] || [];
+                  return (
+                    <div key={o.id} style={{
+                      padding: 16, border: "1px solid #e0e0e0", borderRadius: 12,
+                    }}>
+                      {/* Header: order number + status */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div style={{ fontSize: 13, color: "#5f6368" }}>
+                          {o.order_number}
+                          <span style={{ marginLeft: 8, color: "#9aa0a6" }}>{timeAgo(o.created_at)}</span>
+                        </div>
+                        <span style={{
+                          padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600,
+                          color: st.color, background: st.bg,
+                        }}>
+                          {st.label}
+                        </span>
+                      </div>
+
+                      {/* Product info */}
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                        {o.product_image && (
+                          <img src={o.product_image} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {o.product_title}
+                          </div>
+                          <div style={{ fontSize: 13, color: "#5f6368", marginTop: 2 }}>
+                            <span style={{ fontWeight: 600 }}>{formatPrice(o.product_price)}</span>
+                            {o.agent_fee > 0 && (
+                              <span style={{ marginLeft: 6, color: "#9aa0a6" }}>
+                                + 에이전트 {formatPrice(o.agent_fee)}
+                              </span>
+                            )}
+                            <span style={{ marginLeft: 6, fontWeight: 700 }}>
+                              = {formatPrice(o.total_price)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Buyer info */}
+                      <div style={{ fontSize: 13, color: "#5f6368", padding: "8px 0", borderTop: "1px solid #f1f3f4" }}>
+                        <span style={{ fontWeight: 500 }}>{o.buyer_name}</span>
+                        <span style={{ marginLeft: 8 }}>{o.buyer_phone}</span>
+                        {o.buyer_address && <div style={{ marginTop: 2 }}>{o.buyer_address}</div>}
+                        {o.memo && <div style={{ marginTop: 4, color: "#e37400", fontStyle: "italic" }}>{o.memo}</div>}
+                        {o.agent_id && <div style={{ marginTop: 2, color: "#9aa0a6" }}>에이전트: {o.agent_id}</div>}
+                      </div>
+
+                      {/* Actions */}
+                      {transitions.length > 0 && (
+                        <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #f1f3f4" }}>
+                          {transitions.map(t => (
+                            <button
+                              key={t.status}
+                              onClick={() => handleOrderStatus(o.id, t.status)}
+                              style={{
+                                padding: "8px 16px", fontSize: 13, fontWeight: 600,
+                                color: "#fff", background: t.color,
+                                border: "none", borderRadius: 8, cursor: "pointer",
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
