@@ -203,6 +203,7 @@ export default function Home() {
   return (
     <div className="main">
       <header className="header">
+        <span className="header-link" onClick={() => router.push("/events")} style={{ cursor: "pointer", color: "#ea4335", fontWeight: 600 }}>🔥 이벤트</span>
         <span className="header-link" onClick={() => router.push("/agents")} style={{ cursor: "pointer" }}>에이전트</span>
         <span className="header-link" onClick={() => router.push("/submit")} style={{ cursor: "pointer" }}>상품 등록</span>
         <span className="header-link" onClick={() => router.push("/seller/login")} style={{ cursor: "pointer" }}>셀러</span>
