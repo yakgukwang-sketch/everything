@@ -70,16 +70,18 @@ def crawl_events(tabs: dict[str, str] = None, page_size: int = 100) -> list[Deal
                             if price_text.isdigit():
                                 price = int(price_text)
 
-                        # 이미지
+                        # 이미지 — /upload/ 경로 우선 선택
                         image_url = ""
-                        img_el = item.select_one("img[src]")
-                        if img_el:
+                        for img_el in item.select("img[src]"):
                             src = img_el.get("src", "")
-                            if src and not any(skip in src for skip in ["icon", "blank", "btn"]):
-                                if src.startswith("/"):
-                                    image_url = f"https://www.7-eleven.co.kr{src}"
-                                elif src.startswith("http"):
-                                    image_url = src
+                            if not src or any(skip in src for skip in ["icon", "blank", "btn", "product_list"]):
+                                continue
+                            if src.startswith("/"):
+                                image_url = f"https://www.7-eleven.co.kr{src}"
+                                break
+                            elif src.startswith("http"):
+                                image_url = src
+                                break
 
                         # 상품코드
                         source_id = ""

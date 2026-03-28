@@ -8,6 +8,13 @@ import {
 } from "@/lib/shared";
 import DealFeed from "@/components/DealFeed";
 
+// 편의점 브랜드 정보
+const CVS_BRANDS = [
+  { id: "gs25", name: "GS25", color: "#00a4e0", logo: "🏪" },
+  { id: "cu", name: "CU", color: "#652f8d", logo: "🟣" },
+  { id: "seven_eleven", name: "세븐일레븐", color: "#008061", logo: "🟢" },
+];
+
 // 하드코딩된 에이전트 목록 (API 실패 시 폴백)
 const FALLBACK_AGENTS: AgentInfo[] = [
   { id: "gamja", name: "감자", icon: "🥔", description: "싼 거 전문! 가성비 끝판왕", greeting: "안녕! 나 감자 🥔 싼 거 전문이야 ㅋㅋ 뭐 찾아?" },
@@ -23,6 +30,7 @@ export default function Home() {
   const [feedTab, setFeedTab] = useState<"hot" | "latest">("hot");
   const [feedFilter, setFeedFilter] = useState("all");
   const [feedLoading, setFeedLoading] = useState(false);
+
 
   // 에이전트 채팅 state
   const [activeAgent, setActiveAgent] = useState<AgentInfo | null>(null);
@@ -215,30 +223,6 @@ export default function Home() {
           <h1 className="logo">everything</h1>
           <p className="tagline">당신을 위한 세일즈맨</p>
 
-          {/* 에이전트 카드 섹션 */}
-          <div className="agent-cards-section">
-            {agents.map(agent => (
-              <div
-                key={agent.id}
-                className="agent-select-card"
-                onClick={() => startAgentChat(agent)}
-              >
-                <div className="agent-select-icon">{agent.icon}</div>
-                <div className="agent-select-info">
-                  <div className="agent-select-name">{agent.name} 에이전트</div>
-                  <div className="agent-select-desc">{agent.description}</div>
-                </div>
-              </div>
-            ))}
-            <div className="agent-select-card agent-coming-soon">
-              <div className="agent-select-icon" style={{ opacity: 0.4 }}>🔜</div>
-              <div className="agent-select-info">
-                <div className="agent-select-name" style={{ opacity: 0.5 }}>더 많은 에이전트</div>
-                <div className="agent-select-desc" style={{ opacity: 0.4 }}>coming soon...</div>
-              </div>
-            </div>
-          </div>
-
           <form className="search-form" onSubmit={handleSubmit}>
             <div className="search-wrapper">
               <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -250,44 +234,27 @@ export default function Home() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="뭐든 물어보세요 (쇼핑, 배달, 뭐든)"
+                placeholder=""
                 autoFocus
               />
             </div>
           </form>
 
-          <div className="quick-examples">
-            {[
-              "노트북 추천해줘",
-              "이어폰 사고싶어",
-              "가성비 키보드",
-              "선물 추천",
-            ].map(ex => (
-              <button key={ex} className="example-chip" onClick={() => {
-                const gamja = agents.find(a => a.id === "gamja") || FALLBACK_AGENTS[0];
-                setActiveAgent(gamja);
-                setPhase("agent_chat");
-                const agentMsgs: ChatMessage[] = [
-                  { role: "system", text: gamja.greeting },
-                  { role: "user", text: ex },
-                ];
-                setChatMsgs(agentMsgs);
-                sendToAgent(agentMsgs, gamja);
-              }}>
-                {ex}
-              </button>
+          {/* 편의점 브랜드 카드 */}
+          <div className="cvs-brand-cards">
+            {CVS_BRANDS.map(brand => (
+              <div
+                key={brand.id}
+                className="cvs-brand-tile"
+                style={{ borderColor: brand.color }}
+                onClick={() => router.push(`/cvs/${brand.id}`)}
+              >
+                <div className="cvs-brand-tile-logo" style={{ background: brand.color }}>{brand.logo}</div>
+                <div className="cvs-brand-tile-name">{brand.name}</div>
+                <div className="cvs-brand-tile-sub">행사 전단지 보기</div>
+              </div>
             ))}
           </div>
-
-          {/* 딜 피드 */}
-          <DealFeed
-            deals={deals}
-            feedTab={feedTab}
-            feedFilter={feedFilter}
-            feedLoading={feedLoading}
-            onTabChange={setFeedTab}
-            onFilterChange={setFeedFilter}
-          />
         </div>
       ) : (
         /* 대화 모드 */
